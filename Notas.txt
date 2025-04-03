@@ -1,1 +1,17 @@
-3.1 abordagens de virgula flutuante não são aplicáveis devidos aos dados serem inteiros
+3.1 abordagens de virgula flutuante não são aplicáveis devidos aos dados serem inteiros,
+não fazer grid search de todas as combinações de parametros, crossovers, mutations e cenários
+boas ftns > 4 best 7 ou 8. GA
+	Pop	Gen
+GA - 	50	100
+ES - 	5	1000
+Pois ES utiliza pouca população em comparação com o anterior para obter uma
+comparação justa entre as duas abordagens
+
+3.2 Evoluir um conjunto de pesos Diferential Evolution deve ser testado, campos reais e 
+continuos
+
+3.3 Evoluir os dois ao mesmo tempo, evoluir um e em seguida o outro (modelos em ilhas, 
+co-evolução)
+
+Para o número de gerações o número ideal deverá ser quando a fitness estagnar no plot.
+Eficácia é interessante de se obter
