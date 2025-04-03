@@ -11,12 +11,12 @@ from fixed_controllers import *
 
 # ---- PARAMETERS ----
 NUM_GENERATIONS = 250  # Number of generations to evolve
-MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
+MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot gridWs
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
 SCENARIO = 'Walker-v0'
-# ---- VOXEL TYPES ----
-VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)
+# ---- VOXEL TYPES ----W
+VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Horizontal, Veritcal
 
 CONTROLLER = alternating_gait
 
