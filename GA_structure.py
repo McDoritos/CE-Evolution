@@ -61,23 +61,6 @@ def create_random_robot():
     return random_robot
 
 
-def random_search():
-    """Perform a random search to find the best robot structure."""
-    best_robot = None
-    best_fitness = -float('inf')
-    
-    for it in range(NUM_GENERATIONS):
-        robot = create_random_robot() 
-        fitness_score = evaluate_fitness(robot)
-        
-        if fitness_score > best_fitness:
-            best_fitness = fitness_score
-            best_robot = robot
-        
-        print(f"Iteration {it + 1}: Fitness = {fitness_score}")
-    
-    return best_robot, best_fitness
-
 def genetic_algorithm():
     population = [create_random_robot() for _ in range(POP)]
     best_global = None
