@@ -10,13 +10,14 @@ from fixed_controllers import *
 
 
 # ---- PARAMETERS ----
-NUM_GENERATIONS = 250  # Number of generations to evolve
+NUM_GENERATIONS = 30  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
 SCENARIO = 'Walker-v0'
-POP = 5
+POP = 50
 MUTATION = 0.05
+ELITE = 10
 # ---- VOXEL TYPES ----
 VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)
 
@@ -78,38 +79,78 @@ def random_search():
     return best_robot, best_fitness
 
 def genetic_algorithm():
-
     population = [create_random_robot() for _ in range(POP)]
-    fitness = []
-    for gen in range(NUM_GENERATIONS):
-        print(population)
-        for agent in population:
-            fitness.append(evaluate_fitness(agent))
-        print("Fitness máxima: ",max(fitness))
-        #population = sorted(population, key=fitness, reverse=True) # Rever, isto está ao contrário Descendente, melhor solução é 0
-        #if fitness(population[0]) == 100:
-        #    break
-        #new_population = []
-        #while len(new_population) < pop_size:
-        #    p1, p2 = tournament_selection(population) # Cuidado com alterações, usar np.copy ou equivalente
-        #    child = crossover(p1, p2)
-        #    child = mutate(child, mutation_rate)
-        #    new_population.append(child)
-        #population = new_population
-        #print(f"Generation {gen + 1}, Best Fitness: {fitness(population[0])}")
+    best_global = None
+    best_fitness = -np.inf
 
-    #return best_robot, best_fitness
-    return
+    for gen in range(NUM_GENERATIONS):
+        fitness_values = [evaluate_fitness(ind) for ind in population]
+        current_best_idx = np.argmax(fitness_values)
+        
+        if fitness_values[current_best_idx] > best_fitness:
+            best_fitness = fitness_values[current_best_idx]
+            best_global = population[current_best_idx].copy()
+        
+        print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
+
+        elite_indices = np.argsort(fitness_values)[-ELITE:]
+        elites = [population[i].copy() for i in elite_indices]
+
+        new_population = elites.copy()
+        
+        while len(new_population) < POP:
+            p1, p2 = tournament_selection(population, fitness_values)
+            child = crossover(p1, p2)
+            child = mutate(child, MUTATION)
+            new_population.append(child)
+        
+        population = new_population
+
+    return best_global, best_fitness
+
+def crossover(parent1, parent2, max_attempts=10):
+
+    for _ in range(max_attempts):
+        mask = np.random.randint(0, 2, size=parent1.shape)
+        child = np.where(mask, parent2, parent1)
+        
+        if is_connected(child) and has_actuator(child):
+            return child
+    
+    return parent1 if evaluate_fitness(parent1) > evaluate_fitness(parent2) else parent2
+
+def tournament_selection(population, fitness_values, k=5):
+    selected_indices = random.sample(range(len(population)), k)
+    selected = [(population[i], fitness_values[i]) for i in selected_indices]
+    selected.sort(key=lambda x: x[1], reverse=True)
+    return selected[0][0], selected[1][0]
+
+def mutate(individual, mutation_rate, max_attempts=5):
+    original = individual.copy()
+    
+    for _ in range(max_attempts):
+        mutated = individual.copy()
+        flattened = mutated.flatten()
+        num_mutations = int(len(flattened) * mutation_rate)
+        
+        for i in random.sample(range(len(flattened)), num_mutations):
+            flattened[i] = 1 - flattened[i]
+        
+        mutated = flattened.reshape(individual.shape)
+        
+        if is_connected(mutated) and has_actuator(mutated):
+            return mutated
+    
+    return original
 
 # Example usage
-genetic_algorithm()
-#best_robot, best_fitness = random_search()
-#print("Best robot structure found:")
-#print(best_robot)
-#print("Best fitness score:")
-#print(best_fitness)
-#i = 0
-#while i < 10:
-#    utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
-#    i += 1
-#utils.create_gif(best_robot, filename='random_search.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)
+best_robot, best_fitness = genetic_algorithm()
+print("Best robot structure found:")
+print(best_robot)
+print("Best fitness score:")
+print(best_fitness)
+i = 0
+while i < 10:
+    utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
+    i += 1
+utils.create_gif(best_robot, filename='ga_search.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)
