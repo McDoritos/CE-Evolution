@@ -10,7 +10,7 @@ from fixed_controllers import *
 
 
 # ---- PARAMETERS ----
-NUM_GENERATIONS = 30  # Number of generations to evolve
+NUM_GENERATIONS = 100  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
