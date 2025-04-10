@@ -1,3 +1,4 @@
+import datetime
 import numpy as np
 import random
 import copy
@@ -7,7 +8,8 @@ from evogym.envs import *
 from evogym import EvoWorld, EvoSim, EvoViewer, sample_robot, get_full_connectivity, is_connected
 import utils
 from fixed_controllers import *
-
+import multiprocessing
+from tqdm import trange
 
 # ---- PARAMETERS ----
 NUM_GENERATIONS = 100  # Number of generations to evolve
@@ -22,6 +24,8 @@ LAMBDA = 10
 VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)
 
 CONTROLLER = alternating_gait
+
+printS = []
 
 def evaluate_fitness(robot_structure, view=False):    
     try:
@@ -60,28 +64,41 @@ def create_random_robot():
     return random_robot
 
 def evolutionary_strategy():
-    population = [create_random_robot() for _ in range(MU)]
-    best_global = None
-    best_fitness = -np.inf
+    try:
+        global printS
+        population = [create_random_robot() for _ in range(MU)]
+        best_global = None
+        best_fitness = -np.inf
 
-    for gen in range(NUM_GENERATIONS):
-        offsprings = [mutate(population[random.randint(0, len(population) - 1)]) for _ in range(LAMBDA)]
-        population.extend(offsprings)
+        for gen in trange(NUM_GENERATIONS, desc="Evolving ES ", unit="gen"):
+            offsprings = [mutate(population[random.randint(0, len(population) - 1)]) for _ in range(LAMBDA)]
+            population.extend(offsprings)
 
-        population_with_fitness = [(ind, evaluate_fitness(ind)) for ind in population]
-        population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
-        
-        if population_with_fitness[0][1] > best_fitness:
-            best_fitness = population_with_fitness[0][1]
-            best_global = population_with_fitness[0][0].copy()
-        
-        # Calculate the mean fitness value without extracting the list
-        avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
-        print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {avg_fitness:.4f}")
+                        # Parallel fitness evaluation
+            with multiprocessing.Pool() as pool:
+                fitness_values = pool.map(evaluate_fitness, population)
 
-        population = [ind for ind, _ in population_with_fitness[:MU]]
+            # Pair population with fitness
+            population_with_fitness = list(zip(population, fitness_values))
+            population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+            
+            if population_with_fitness[0][1] > best_fitness:
+                best_fitness = population_with_fitness[0][1]
+                best_global = population_with_fitness[0][0].copy()
+            
+            # Calculate the mean fitness value without extracting the list
+            avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
+            printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {avg_fitness:.4f}")
 
-    return best_global, best_fitness
+            population = [ind for ind, _ in population_with_fitness[:MU]]
+
+    except KeyboardInterrupt:
+        printS +=("\n[INFO] Interrupted by user. Finalizing with current best found...")
+
+    finally:
+        return best_global, best_fitness
+    
+
 
 
 def mutate(parent, max_attempts=5):
@@ -104,15 +121,29 @@ def mutate(parent, max_attempts=5):
 
 
 def run_es():
+    global printS
     best_robot, best_fitness = evolutionary_strategy()
-    print("Best robot structure found:")
-    print(best_robot)
-    print("Best fitness score:")
-    print(best_fitness)
+    if best_robot is not None:
+        printS +=("Best robot structure found:")
+        printS +=(best_robot)
+        printS +=("Best fitness score:")
+        printS +=(best_fitness)
 
-    for i in range(10):
-        utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
-    utils.create_gif(best_robot, filename='ga_search.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)
+        for i in range(5):
+            utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
+        now = datetime.now()
+        timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
+        utils.create_gif(best_robot, filename=f'es_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
+    else:
+        printS +=("No valid robot was evolved.")
+    
+    for s in printS:
+        print(s)  
 
-utils.set_seed(utils.seed_list[0])
-run_es()
+if __name__ == "__main__":
+
+    multiprocessing.freeze_support()
+
+    for seed in utils.seed_list:
+        utils.set_seed(utils.seed_list[0])
+        run_es()
