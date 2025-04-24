@@ -1,7 +1,9 @@
+import random
 import numpy as np
 import gymnasium as gym
 from evogym import EvoViewer, get_full_connectivity
 import imageio
+import torch
 from fixed_controllers import *
 
 # ---- SIMULATE BEST ROBOT ----
@@ -66,6 +68,10 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
     except ValueError as e:
         print('Invalid')
         
+seed_list = [42, 123, 2025, 8675309, 314159]
 
-
-    
+def set_seed(seed):
+    # Set the random seed for reproducibility
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
