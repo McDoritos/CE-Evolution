@@ -7,8 +7,8 @@ ES - 	5	1000
 Pois ES utiliza pouca população em comparação com o anterior para obter uma
 comparação justa entre as duas abordagens
 
-3.2 Evoluir um conjunto de pesos Diferential Evolution deve ser testado, campos reais e 
-continuos
+3.2 Evoluir um conjunto de pesos Diferential Evolution ou Evolutionary Strategy deve ser 
+testado, campos reais e continuos
 
 3.3 Evoluir os dois ao mesmo tempo, evoluir um e em seguida o outro (modelos em ilhas, 
 co-evolução)

@@ -9,9 +9,7 @@ from neural_controller import *
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SCENARIO = 'DownStepper-v0'
-seed_list = [42, 123, 2025, 8675309, 314159]
 SEED = 42
-
 np.random.seed(SEED)
 random.seed(SEED)
 
