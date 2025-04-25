@@ -10,6 +10,8 @@ NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SCENARIO = 'DownStepper-v0'
 SEED = 42
+POPULATION_SIZE = 10
+CROSSOVER_PER = 0.7
 np.random.seed(SEED)
 random.seed(SEED)
 
@@ -58,27 +60,81 @@ def evaluate_fitness(weights, view=False):
         return t_reward 
 
 
-# ---- RANDOM SEARCH ALGORITHM ----
-best_fitness = -np.inf
-best_weights = None
+# ---- DIFERENTIAL EVOLUTION ALGORITHM ----
+
+# 1 - Generate a random population
+population = []
+population_fitness = []
+best_rewards = []
+mean_rewards = []
+best_individual = None
+best_individual_reward = -np.inf
+
+for i in range(POPULATION_SIZE):
+
+    individual = [np.random.randn(*param.shape) for param in brain.parameters()]
+    population.append(individual)
+    reward = evaluate_fitness(individual)
+    population_fitness.append(reward)
+
+    if reward > best_individual_reward:
+        best_individual = individual.copy()
+        best_individual_reward = reward
 
 for generation in range(NUM_GENERATIONS):
-    # Generate random weights for the neural network
-    random_weights = [np.random.randn(*param.shape) for param in brain.parameters()]
-    
-    # Evaluate the fitness of the current weights
-    fitness = evaluate_fitness(random_weights)
-    
-    # Check if the current weights are the best so far
-    if fitness > best_fitness:
-        best_fitness = fitness
-        best_weights = random_weights
-    
-    print(f"Generation {generation + 1}/{NUM_GENERATIONS}, Fitness: {fitness}")
+    # 2 - Mutate child with different weighted solutions
+    mutated_pop = []
+    best_idx = np.argmax(population_fitness)
+    for i in range(len(population)):
+        random_idx = random.sample(range(len(population)),2)
+        
+        lam = 0.5 * (1 + random.random())
+        variant = [np.array(population[best_idx][k]) + lam * (np.array(population[random_idx[0]][k]) - np.array(population[random_idx[1]][k])) for k in range(len(population[random_idx[0]]))]
+        mutated_pop.append(variant)
 
-# Set the best weights found
-set_weights(brain, best_weights)
-print(f"Best Fitness: {best_fitness}")
+    # 3 - Mix mutant vectors with target vectors to create trial solutions
+    trial_pop = []
+    for i, j in zip(population, mutated_pop):
+        i_rand = random.randint(0, len(population)-1)
+        trial = np.zeros_like(i)
+        for k in range(len(i)):
+            if random.random() < CROSSOVER_PER or k == i_rand:
+                trial[k] = j[k]
+            else:
+                trial[k] = i[k]
+        trial_pop.append(trial)
+
+    # 4 - Choose the better solution between the target and trial vectors
+    new_population = []
+    new_population_rewards = []
+    for i, j in zip(population, trial_pop):
+        pop_reward = evaluate_fitness(i)
+        trial_reward = evaluate_fitness(j)
+
+        if trial_reward > pop_reward:
+            new_population.append(j)
+            new_population_rewards.append(trial_reward)
+            if trial_reward > best_individual_reward:
+                best_individual = j.copy()
+                best_individual_reward = trial_reward
+        else:
+            new_population.append(i)
+            new_population_rewards.append(pop_reward)
+            if pop_reward > best_individual_reward:
+                best_individual = i.copy()
+                best_individual_reward = pop_reward
+
+    best_reward = max(new_population_rewards)
+    population = new_population.copy()
+    population_fitness = new_population_rewards.copy()
+
+    best_rewards.append(best_reward)
+    mean_rewards.append(sum(new_population_rewards) / len(new_population_rewards))
+
+    print(f"Generation {generation + 1}: Best Reward = {best_reward} Mean Reward = {sum(new_population_rewards) / len(new_population_rewards)}")
+
+print("Best Fitness: ", best_individual_reward)
+set_weights(brain, best_individual) 
 
 
 # ---- VISUALIZATION ----
@@ -103,5 +159,5 @@ def visualize_policy(weights):
     env.close()
 i = 0
 while i < 10:
-    visualize_policy(best_weights)
+    visualize_policy(best_individual)
     i += 1
