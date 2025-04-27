@@ -5,12 +5,14 @@ from evogym.envs import *
 from evogym import EvoViewer, get_full_connectivity
 from neural_controller import *
 
+from tqdm import trange
+
 
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SCENARIO = 'DownStepper-v0'
 SEED = 42
-POPULATION_SIZE = 10
+POPULATION_SIZE = 10 # 10 > 20 
 CROSSOVER_PER = 0.7
 np.random.seed(SEED)
 random.seed(SEED)
@@ -81,7 +83,7 @@ for i in range(POPULATION_SIZE):
         best_individual = individual.copy()
         best_individual_reward = reward
 
-for generation in range(NUM_GENERATIONS):
+for generation in trange(NUM_GENERATIONS, desc="Evolving DE", unit="gen"):
     # 2 - Mutate child with different weighted solutions
     mutated_pop = []
     best_idx = np.argmax(population_fitness)
@@ -158,6 +160,5 @@ def visualize_policy(weights):
     viewer.close()
     env.close()
 i = 0
-while i < 10:
+while i == 0 :
     visualize_policy(best_individual)
-    i += 1
