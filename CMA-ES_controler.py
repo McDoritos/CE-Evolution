@@ -6,7 +6,6 @@ from evogym import EvoViewer, get_full_connectivity
 from neural_controller import *
 
 from tqdm import trange
-import cma
 #import multiprocessing
 
 
@@ -27,6 +26,8 @@ robot_structure = np.array([
 [3,0,0,3,2],
 [0,0,0,0,2]
 ])
+
+
 
 connectivity = get_full_connectivity(robot_structure)
 env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
@@ -61,59 +62,45 @@ def evaluate_fitness(weights, view=False):
         env.close()
         return t_reward 
 
-def weights_to_vector(weights):
-    """convert list of weights to numpy"""
-    return np.concatenate([w.flatten() for w in weights])
+def mutate(individual, noise_std=0.1):
+    """Mutate the weights by adding Gaussian noise."""
+    mutated = []
+    for param in individual:
+        noise = np.random.normal(0, noise_std, param.shape)
+        mutated.append(param + noise)
+    return mutated
 
-def vector_to_weights(vector, weight_shapes):
-    """convert numpy into list of weights"""
-    weights = []
-    idx = 0
-    for shape in weight_shapes:
-        size = np.prod(shape)
-        weights.append(vector[idx:idx+size].reshape(shape))
-        idx += size
-    return weights
-
-weight_shapes = [p.shape for p in brain.parameters()]
-
-def cma_fitness_wrapper(vector):
-    """adapts the fitness fuction to the CMA-ES"""
-    weights = vector_to_weights(vector, weight_shapes)
-    return -evaluate_fitness(weights)  # CMA-ES minimiza, então é invertida a fitness
-
-# Initializing CMA-ES
-initial_params = weights_to_vector([np.random.randn(*s) for s in weight_shapes])
-es = cma.CMAEvolutionStrategy(initial_params, 0.5, {'seed': SEED})
-
-best_rewards = []
-mean_rewards = []
+# ---- EVOLUTIONARY STRATEGY ALGORITHM ----
+population = [ [np.random.randn(*param.shape) for param in brain.parameters()] for _ in range(POPULATION_SIZE) ]
 best_individual = None
 best_individual_reward = -np.inf
 
-for gen in trange(NUM_GENERATIONS, desc="CMA-ES Optimization"):
-    # 1 - Generates solutions
-    solutions = es.ask()
+best_rewards = []
+mean_rewards = []
 
-    # 2 - Evaluates solutions
-    fitness = [cma_fitness_wrapper(x) for x in solutions]
+for gen in trange(NUM_GENERATIONS, desc="Evolving ES", unit="gen"):
 
-    # 3 - Updates the strategy with the results (covariance matrix and sigma (step length))
-    es.tell(solutions, fitness)
-
-    # 4 - Anotates the best fitness, the mean and the best individual
-    current_best = -es.best.f
-    current_mean = -np.mean(fitness)
+    offspring = [ mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE) ]
+    combined_population = population + offspring
     
-    if current_best > best_individual_reward:
-        best_individual_reward = current_best
-        best_individual = vector_to_weights(es.best.x, weight_shapes)
-    
-    best_rewards.append(current_best)
-    mean_rewards.append(current_mean)
-    
-    print(f"Gen {gen+1}: Best {current_best:.2f} | Mean {current_mean:.2f} | σ={es.sigma:.3f}\n")
+    fitness_values = [evaluate_fitness(individual) for individual in combined_population]
 
+    population_with_fitness = list(zip(combined_population, fitness_values))
+    population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+
+    if population_with_fitness[0][1] > best_individual_reward:
+        best_individual_reward = population_with_fitness[0][1]
+        best_individual = population_with_fitness[0][0].copy()
+
+    avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
+    best_rewards.append(best_individual_reward)
+    mean_rewards.append(avg_fitness)
+
+    population = [ind for ind, _ in population_with_fitness[:POPULATION_SIZE]]
+
+    print(f"Generation {gen + 1}: Best Reward = {best_individual_reward:.4f}, Mean Reward = {avg_fitness:.4f}")
+
+print("Best Fitness Achieved: ", best_individual_reward)
 set_weights(brain, best_individual)
 
 # ---- VISUALIZATION ----
