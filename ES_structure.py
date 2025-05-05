@@ -11,6 +11,12 @@ from fixed_controllers import *
 import multiprocessing
 from tqdm import trange
 
+import csv
+from datetime import datetime
+import os
+
+os.makedirs("gen_data_structures", exist_ok=True)
+
 # ---- PARAMETERS ----
 NUM_GENERATIONS = 100  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
@@ -70,35 +76,41 @@ def evolutionary_strategy():
         best_global = None
         best_fitness = -np.inf
 
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_filename = os.path.join("gen_data_structures", f"ES-Structure_evolution-data_{timestamp}.csv")
+
         for gen in trange(NUM_GENERATIONS, desc="Evolving ES ", unit="gen"):
             offsprings = [mutate(population[random.randint(0, len(population) - 1)]) for _ in range(LAMBDA)]
             population.extend(offsprings)
 
-                        # Parallel fitness evaluation
-            with multiprocessing.Pool() as pool:
-                fitness_values = pool.map(evaluate_fitness, population)
+            # Parallel fitness evaluation
+            #with multiprocessing.Pool() as pool:
+            #    fitness_values = pool.map(evaluate_fitness, population)
+            fitness_values = [evaluate_fitness(ind) for ind in population]
 
             # Pair population with fitness
             population_with_fitness = list(zip(population, fitness_values))
             population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
             
+            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+
             if population_with_fitness[0][1] > best_fitness:
                 best_fitness = population_with_fitness[0][1]
                 best_global = population_with_fitness[0][0].copy()
             
             # Calculate the mean fitness value without extracting the list
             avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
-            printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {avg_fitness:.4f}")
-
+            #printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {avg_fitness:.4f}")
+            print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {avg_fitness:.4f}")
             population = [ind for ind, _ in population_with_fitness[:MU]]
 
     except KeyboardInterrupt:
-        printS +=("\n[INFO] Interrupted by user. Finalizing with current best found...")
-
+        #printS +=("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        print("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        if 'population_with_fitness' in locals():
+            utils.save_structures(gen+1, population_with_fitness, csv_filename)
     finally:
         return best_global, best_fitness
-    
-
 
 
 def mutate(parent, max_attempts=5):
@@ -124,10 +136,10 @@ def run_es():
     global printS
     best_robot, best_fitness = evolutionary_strategy()
     if best_robot is not None:
-        printS +=("Best robot structure found:")
-        printS +=(best_robot)
-        printS +=("Best fitness score:")
-        printS +=(best_fitness)
+        printS.append("Best robot structure found:")
+        printS.append(best_robot)
+        printS.append("Best fitness score:")
+        printS.append(best_fitness)
 
         for i in range(5):
             utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
@@ -135,14 +147,14 @@ def run_es():
         timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
         utils.create_gif(best_robot, filename=f'es_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
     else:
-        printS +=("No valid robot was evolved.")
+        printS.append("No valid robot was evolved.")
     
     for s in printS:
         print(s)  
 
 if __name__ == "__main__":
 
-    multiprocessing.freeze_support()
+    #multiprocessing.freeze_support()
 
     for seed in utils.seed_list:
         utils.set_seed(utils.seed_list[0])

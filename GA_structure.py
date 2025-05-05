@@ -10,11 +10,14 @@ import utils
 from fixed_controllers import *
 import multiprocessing
 from tqdm import trange
+from datetime import datetime
+import os
 
+os.makedirs("gen_data_structures", exist_ok=True)
 
 
 # ---- PARAMETERS ----
-NUM_GENERATIONS = 100  # Number of generations to evolve
+NUM_GENERATIONS = 50  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
@@ -74,17 +77,26 @@ def genetic_algorithm():
         best_global = None
         best_fitness = -np.inf
 
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_filename = os.path.join("gen_data_structures", f"GA-Structure_evolution-data_{timestamp}.csv")
+
         for gen in trange(NUM_GENERATIONS, desc='Evolving GA ', unit='gen'):
-            with multiprocessing.Pool() as pool:
-                fitness_values = pool.map(evaluate_fitness, population)
-            # fitness_values = [evaluate_fitness(ind) for ind in population]
-            current_best_idx = np.argmax(fitness_values)
+            #with multiprocessing.Pool() as pool:
+            #    fitness_values = pool.map(evaluate_fitness, population)
+            fitness_values = [evaluate_fitness(ind) for ind in population]
+
+            population_with_fitness = list(zip(population, fitness_values))
+            population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+
+            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+
+            if population_with_fitness[0][1] > best_fitness:
+                best_fitness = population_with_fitness[0][1]
+                best_global = population_with_fitness[0][0].copy()
             
-            if fitness_values[current_best_idx] > best_fitness:
-                best_fitness = fitness_values[current_best_idx]
-                best_global = population[current_best_idx].copy()
+            #printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
             
-            printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
+            print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
 
             elite_indices = np.argsort(fitness_values)[-ELITE:]
             elites = [population[i].copy() for i in elite_indices]
@@ -100,7 +112,12 @@ def genetic_algorithm():
             population = new_population
 
     except KeyboardInterrupt:
-        printS.append("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        #printS.append("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        
+        print("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        
+        if 'population_with_fitness' in locals():
+            utils.save_structures(gen+1, population_with_fitness, csv_filename)
 
     finally:
         return best_global, best_fitness
@@ -126,14 +143,17 @@ def mutate(individual, mutation_rate, max_attempts=5):
     original = individual.copy()
     
     for _ in range(max_attempts):
-        mutated = individual.copy()
-        flattened = mutated.flatten()
-        num_mutations = int(len(flattened) * mutation_rate)
+        mutated = original.copy()
+        # chooses random voxels for mutation
+        mask = np.random.random(individual.shape) < mutation_rate
+        if not np.any(mask):  # garants at least 1 mutation
+            mask.flat[np.random.randint(0, individual.size)] = True
         
-        for i in random.sample(range(len(flattened)), num_mutations):
-            flattened[i] = (flattened[i] + random.randint(0, len(VOXEL_TYPES) - 1)) % len(VOXEL_TYPES)
-        
-        mutated = flattened.reshape(individual.shape)
+        for i, j in zip(*np.where(mask)):
+            current = mutated[i, j]
+            # choose a new voxel different from the current one
+            new_val = random.choice([x for x in VOXEL_TYPES if x != current])
+            mutated[i, j] = new_val
         
         if is_connected(mutated) and has_actuator(mutated):
             return mutated

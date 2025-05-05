@@ -6,7 +6,11 @@ from evogym import EvoViewer, get_full_connectivity
 from neural_controller import *
 
 from tqdm import trange
+import utils
+from datetime import datetime
 #import multiprocessing
+
+os.makedirs("gen_data_controllers", exist_ok=True)
 
 
 NUM_GENERATIONS = 100  # Number of generations to evolve
@@ -26,7 +30,6 @@ robot_structure = np.array([
 [3,0,0,3,2],
 [0,0,0,0,2]
 ])
-
 
 
 connectivity = get_full_connectivity(robot_structure)
@@ -71,42 +74,60 @@ def mutate(individual, noise_std=0.1):
     return mutated
 
 # ---- EVOLUTIONARY STRATEGY ALGORITHM ----
-# 1 - Generate population
-population = [ [np.random.randn(*param.shape) for param in brain.parameters()] for _ in range(POPULATION_SIZE) ]
-best_individual = None
-best_individual_reward = -np.inf
 
-best_rewards = []
-mean_rewards = []
+try:
+    # 1 - Generate population
+    population = [ [np.random.randn(*param.shape) for param in brain.parameters()] for _ in range(POPULATION_SIZE) ]
+    best_individual = None
+    best_individual_reward = -np.inf
 
-for gen in trange(NUM_GENERATIONS, desc="Evolving ES", unit="gen"):
+    best_rewards = []
+    mean_rewards = []
 
-    # 2 - Generate offspring
-    offspring = [ mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE) ]
-    combined_population = population + offspring
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = os.path.join("gen_data_controllers", f"ES-Controller_evolution-data_{timestamp}.csv")
 
-    fitness_values = [evaluate_fitness(individual) for individual in combined_population]
 
-    population_with_fitness = list(zip(combined_population, fitness_values))
-    population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+    for gen in trange(NUM_GENERATIONS, desc="Evolving ES", unit="gen"):
+
+        # 2 - Generate offspring
+        offspring = [ mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE) ]
+        combined_population = population + offspring
+
+        fitness_values = [evaluate_fitness(individual) for individual in combined_population]
+
+        population_with_fitness = list(zip(combined_population, fitness_values))
+        population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+        
+        utils.save_controllers(gen+1, population_with_fitness, csv_filename)
+
+        # Selecting best individual from the population
+        if population_with_fitness[0][1] > best_individual_reward:
+            best_individual_reward = population_with_fitness[0][1]
+            best_individual = population_with_fitness[0][0].copy()
+        
+        # Getting metrics
+        avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
+        best_rewards.append(best_individual_reward)
+        mean_rewards.append(avg_fitness)
+
+        # 3 - Keeping best individuals
+        population = [ind for ind, _ in population_with_fitness[:POPULATION_SIZE]]
+
+        print(f"Generation {gen + 1}: Best Reward = {best_individual_reward:.4f}, Mean Reward = {avg_fitness:.4f}")
+
+    print("Best Fitness Achieved: ", best_individual_reward)
+    set_weights(brain, best_individual)
+except KeyboardInterrupt:
+    print("\n[INFO] Interrupted by user. Saving current state...")
+    if 'population_with_fitness' in locals():
+        utils.save_controllers(gen+1, population_with_fitness, csv_filename)
     
-    # Selecting best individual from the population
-    if population_with_fitness[0][1] > best_individual_reward:
-        best_individual_reward = population_with_fitness[0][1]
-        best_individual = population_with_fitness[0][0].copy()
-    
-    # Getting metrics
-    avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
-    best_rewards.append(best_individual_reward)
-    mean_rewards.append(avg_fitness)
-
-    # 3 - Keeping best individuals
-    population = [ind for ind, _ in population_with_fitness[:POPULATION_SIZE]]
-
-    print(f"Generation {gen + 1}: Best Reward = {best_individual_reward:.4f}, Mean Reward = {avg_fitness:.4f}")
-
-print("Best Fitness Achieved: ", best_individual_reward)
-set_weights(brain, best_individual)
+    if best_individual is not None:
+        print(f"Best reward achieved: {best_individual_reward:.4f}")
+        set_weights(brain, best_individual)       
+finally:
+    print("Evolution completed or interrupted. Data saved.")
 
 # ---- VISUALIZATION ----
 def visualize_policy(weights):

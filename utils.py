@@ -6,6 +6,11 @@ import imageio
 import torch
 from fixed_controllers import *
 
+import csv
+import os
+from datetime import datetime
+import json
+
 # ---- SIMULATE BEST ROBOT ----
 def simulate_best_robot(robot_structure, scenario=None, steps=500, controller = alternating_gait):
     
@@ -75,3 +80,35 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
+
+# Added by us
+def save_structures(generation, population_with_fitness, filename="evolution_data.csv"):
+    """Save generation data to a CSV file."""
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        if not file_exists:
+            writer.writerow(["Generation", "Individual", "Fitness", "RobotStructure"])
+        
+        for idx, (robot, fitness) in enumerate(population_with_fitness):
+            robot_str = '|'.join([','.join(map(str, row)) for row in robot])
+            writer.writerow([generation, idx, fitness, robot_str])
+
+def save_controllers(generation, population_with_fitness, filename="evolution_data.csv"):
+    """Save generation data to a CSV file."""
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        if not file_exists:
+            writer.writerow(["Generation", "Individual", "Fitness", "Controller"])
+            
+        for idx, (controller, fitness) in enumerate(population_with_fitness):
+            controller_str = ";".join(
+                [",".join(map(str, w.flatten())) 
+                 for w in controller]
+            )
+            writer.writerow([generation, idx, fitness, controller_str])

@@ -4,7 +4,6 @@ import gymnasium as gym
 from evogym.envs import *
 from evogym import EvoWorld, EvoSim, EvoViewer, sample_robot, get_full_connectivity, is_connected
 from neural_controller import *
-import cma
 from tqdm import trange
 from fixed_controllers import *
 
@@ -48,7 +47,7 @@ class CoEvolution:
         
         self.best_struc = None
         self.best_con = None
-        self.best_fitness = -np.inf
+        self.best_fitness = -np.infz
 
     def evaluate_struc(self, robot_structure, controller_weights, view=False):    
         try:

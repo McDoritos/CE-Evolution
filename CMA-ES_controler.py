@@ -6,8 +6,12 @@ from evogym import EvoViewer, get_full_connectivity
 from neural_controller import *
 
 from tqdm import trange
+import cma
+from datetime import datetime
+import utils
 #import multiprocessing
 
+os.makedirs("gen_data_controllers", exist_ok=True)
 
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
@@ -26,8 +30,6 @@ robot_structure = np.array([
 [3,0,0,3,2],
 [0,0,0,0,2]
 ])
-
-
 
 connectivity = get_full_connectivity(robot_structure)
 env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
@@ -62,46 +64,79 @@ def evaluate_fitness(weights, view=False):
         env.close()
         return t_reward 
 
-def mutate(individual, noise_std=0.1):
-    """Mutate the weights by adding Gaussian noise."""
-    mutated = []
-    for param in individual:
-        noise = np.random.normal(0, noise_std, param.shape)
-        mutated.append(param + noise)
-    return mutated
+def weights_to_vector(weights):
+    """convert list of weights to numpy"""
+    return np.concatenate([w.flatten() for w in weights])
 
-# ---- EVOLUTIONARY STRATEGY ALGORITHM ----
-population = [ [np.random.randn(*param.shape) for param in brain.parameters()] for _ in range(POPULATION_SIZE) ]
-best_individual = None
-best_individual_reward = -np.inf
+def vector_to_weights(vector, weight_shapes):
+    """convert numpy into list of weights"""
+    weights = []
+    idx = 0
+    for shape in weight_shapes:
+        size = np.prod(shape)
+        weights.append(vector[idx:idx+size].reshape(shape))
+        idx += size
+    return weights
 
-best_rewards = []
-mean_rewards = []
+weight_shapes = [p.shape for p in brain.parameters()]
 
-for gen in trange(NUM_GENERATIONS, desc="Evolving ES", unit="gen"):
+def cma_fitness_wrapper(vector):
+    """adapts the fitness fuction to the CMA-ES"""
+    weights = vector_to_weights(vector, weight_shapes)
+    return -evaluate_fitness(weights)  # CMA-ES minimiza, então é invertida a fitness
 
-    offspring = [ mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE) ]
-    combined_population = population + offspring
+try:
+    # Initializing CMA-ES
+    initial_params = weights_to_vector([np.random.randn(*s) for s in weight_shapes])
+    es = cma.CMAEvolutionStrategy(initial_params, 0.5, {'seed': SEED})
+
+    best_rewards = []
+    mean_rewards = []
+    best_individual = None
+    best_individual_reward = -np.inf
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = os.path.join("gen_data_controllers", f"CMAES-Controller_evolution-data_{timestamp}.csv")
+
+    for gen in trange(NUM_GENERATIONS, desc="CMA-ES Optimization"):
+        # 1 - Generates solutions
+        solutions = es.ask()
+
+        # 2 - Evaluates solutions
+        fitness = [cma_fitness_wrapper(x) for x in solutions]
+
+        population_with_fitness = list(zip(solutions, fitness))
+        population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+
+        utils.save_controllers(gen+1, population_with_fitness, csv_filename)
+
+        # 3 - Updates the strategy with the results (covariance matrix and sigma (step length))
+        es.tell(solutions, fitness)
+
+        # 4 - Anotates the best fitness, the mean and the best individual
+        current_best = -es.best.f
+        current_mean = -np.mean(fitness)
+        
+        if current_best > best_individual_reward:
+            best_individual_reward = current_best
+            best_individual = vector_to_weights(es.best.x, weight_shapes)
+        
+        best_rewards.append(current_best)
+        mean_rewards.append(current_mean)
+        
+        print(f"Gen {gen+1}: Best {current_best:.2f} | Mean {current_mean:.2f} | σ={es.sigma:.3f}\n")
+
+    set_weights(brain, best_individual)
+except KeyboardInterrupt:
+    print("\n[INFO] Interrupted by user. Saving current state...")
+    if 'population_with_fitness' in locals():
+        utils.save_controllers(gen+1, population_with_fitness, csv_filename)
     
-    fitness_values = [evaluate_fitness(individual) for individual in combined_population]
-
-    population_with_fitness = list(zip(combined_population, fitness_values))
-    population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
-
-    if population_with_fitness[0][1] > best_individual_reward:
-        best_individual_reward = population_with_fitness[0][1]
-        best_individual = population_with_fitness[0][0].copy()
-
-    avg_fitness = sum(fitness for _, fitness in population_with_fitness) / len(population_with_fitness)
-    best_rewards.append(best_individual_reward)
-    mean_rewards.append(avg_fitness)
-
-    population = [ind for ind, _ in population_with_fitness[:POPULATION_SIZE]]
-
-    print(f"Generation {gen + 1}: Best Reward = {best_individual_reward:.4f}, Mean Reward = {avg_fitness:.4f}")
-
-print("Best Fitness Achieved: ", best_individual_reward)
-set_weights(brain, best_individual)
+    if best_individual is not None:
+        print(f"Best reward achieved: {best_individual_reward:.4f}")
+        set_weights(brain, best_individual)       
+finally:
+    print("Evolution completed or interrupted. Data saved.")
 
 # ---- VISUALIZATION ----
 def visualize_policy(weights):
