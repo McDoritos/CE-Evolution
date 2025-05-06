@@ -154,7 +154,6 @@ def run_es(seed):
         print("No valid robot was evolved.")
 
 if __name__ == "__main__":
-    # for seed in utils.seed_list:
-    #     utils.set_seed(seed)
-    #     run_es(seed)^
-    run_es(42)
+    for seed in utils.seed_list:
+        utils.set_seed(seed)
+        run_es(seed)
