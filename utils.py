@@ -73,9 +73,9 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
     except ValueError as e:
         print('Invalid')
         
-seed_list = [42, 123, 2025, 8675309, 314159]
+seed_list = [42, 123, 2025, 8675309, 123456789]
 
-def set_seed(seed):
+def set_seed(seed: int):
     # Set the random seed for reproducibility
     np.random.seed(seed)
     random.seed(seed)

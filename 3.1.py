@@ -3,7 +3,7 @@ import random
 import numpy as np
 from utils import *
 import GA_structure as ga
-import ES_structure as es
+import ES_structure_OLD as es
 import signal
 
 def signal_handler(sig, frame):
