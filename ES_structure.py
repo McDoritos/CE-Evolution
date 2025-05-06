@@ -10,7 +10,8 @@ import utils
 from fixed_controllers import *
 from datetime import datetime
 
-os.makedirs("gen_data_structures", exist_ok=True)
+base_dir = "gen_data_structures"
+os.makedirs(base_dir, exist_ok=True)
 
 # ---- PARAMETERS ----
 NUM_GENERATIONS = 100  # Number of generations to evolve
@@ -61,16 +62,27 @@ def create_random_robot():
     random_robot, _ = sample_robot(grid_size)
     return random_robot
 
-def evolutionary_strategy():
+def evolutionary_strategy(seed):
     try:
         population = [create_random_robot() for _ in range(POPULATION_SIZE)]
         best_global = None
         best_fitness = -np.inf
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = os.path.join("gen_data_structures", f"ES-Structure_evolution-data_{timestamp}.csv")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        es_folder = os.path.join(base_dir, f"ES_Structure")
+        os.makedirs(es_folder, exist_ok=True)
+
+        scenario_folder = os.path.join(es_folder, SCENARIO)
+        os.makedirs(scenario_folder, exist_ok=True)
+
+        seed_folder = os.path.join(scenario_folder, f"seed_{seed}")
+        os.makedirs(seed_folder, exist_ok=True)
+
+        execution_folder = os.path.join(seed_folder, f"execution_{timestamp}")
+        os.makedirs(execution_folder, exist_ok=True)
 
         for gen in trange(NUM_GENERATIONS, desc="Evolving ES Structure", unit="gen"):
+            csv_filename = os.path.join(execution_folder, f"generation_{gen}.csv")
             offsprings = [mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE)]
             combined_population = population + offsprings
 
@@ -79,7 +91,7 @@ def evolutionary_strategy():
             population_with_fitness = list(zip(combined_population, fitness_values))
             population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
             
-            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+            utils.save_structure(gen+1, population_with_fitness, csv_filename)
 
             if population_with_fitness[0][1] > best_fitness:
                 best_fitness = population_with_fitness[0][1]
@@ -94,22 +106,21 @@ def evolutionary_strategy():
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted by user. Saving current state...")
         if 'population_with_fitness' in locals():
-            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+            utils.save_structure(gen+1, population_with_fitness, csv_filename)
     finally:
         return best_global, best_fitness
 
 
 def mutate(parent, max_attempts=5):
     child = copy.deepcopy(parent)
+    shape = child.shape
+    total_cells = child.size
+    num_mutations = int(total_cells * MUTATION)
+
     for _ in range(max_attempts):
-        shape = child.shape
-
         child = child.flatten()
-        
-        total_cells = child.size
-        num_mutations = int(total_cells * MUTATION)
-
         indices = random.sample(range(total_cells), num_mutations)
+
         for idx in indices:
             current_value = child[idx]
             choices = [v for v in VOXEL_TYPES if v != current_value]
@@ -123,8 +134,8 @@ def mutate(parent, max_attempts=5):
     return child
 
 
-def run_es():
-    best_robot, best_fitness = evolutionary_strategy()
+def run_es(seed):
+    best_robot, best_fitness = evolutionary_strategy(seed)
     if best_robot is not None:
         print("Best robot structure found:")
         print(best_robot)
@@ -142,4 +153,4 @@ def run_es():
 if __name__ == "__main__":
     for seed in utils.seed_list:
         utils.set_seed(seed)
-        run_es()
+        run_es(seed)

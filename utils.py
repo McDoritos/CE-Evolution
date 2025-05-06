@@ -72,7 +72,10 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
         imageio.mimsave(filename, frames, duration=duration, optimize=True)
     except ValueError as e:
         print('Invalid')
-        
+
+
+# Added by us
+     
 seed_list = [42, 123, 2025, 8675309, 123456789]
 
 def set_seed(seed: int):
@@ -81,7 +84,6 @@ def set_seed(seed: int):
     random.seed(seed)
     torch.manual_seed(seed)
 
-# Added by us
 def save_structures(generation, population_with_fitness, filename="evolution_data.csv"):
     """Save generation data to a CSV file."""
     file_exists = os.path.isfile(filename)
@@ -95,6 +97,21 @@ def save_structures(generation, population_with_fitness, filename="evolution_dat
         for idx, (robot, fitness) in enumerate(population_with_fitness):
             robot_str = '|'.join([','.join(map(str, row)) for row in robot])
             writer.writerow([generation, idx, fitness, robot_str])
+
+def save_structure(population_with_fitness, filename="evolution_data.csv"):
+    """Save generation data to a CSV file."""
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        if not file_exists:
+            writer.writerow(["Individual", "Fitness", "RobotStructure"])
+        
+        for idx, (robot, fitness) in enumerate(population_with_fitness):
+            robot_str = '|'.join([','.join(map(str, row)) for row in robot])
+            writer.writerow([idx, fitness, robot_str])
+
 
 def save_controllers(generation, population_with_fitness, filename="evolution_data.csv"):
     """Save generation data to a CSV file."""
