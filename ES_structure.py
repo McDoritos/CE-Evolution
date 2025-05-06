@@ -54,6 +54,7 @@ def evaluate_fitness(robot_structure, view=False):
         env.close()
         return t_reward
     except (ValueError, IndexError) as e:
+        print(f"[ERROR] Invalid robot structure: {robot_structure}. Error: {e}")
         return 0.0
 
 def create_random_robot():
@@ -78,11 +79,8 @@ def evolutionary_strategy(seed):
         seed_folder = os.path.join(scenario_folder, f"seed_{seed}")
         os.makedirs(seed_folder, exist_ok=True)
 
-        execution_folder = os.path.join(seed_folder, f"execution_{timestamp}")
-        os.makedirs(execution_folder, exist_ok=True)
-
-        for gen in trange(NUM_GENERATIONS, desc="Evolving ES Structure", unit="gen"):
-            csv_filename = os.path.join(execution_folder, f"generation_{gen}.csv")
+        for gen in trange(NUM_GENERATIONS, desc=f"ES Structure {seed}", unit="gen"):
+            csv_filename = os.path.join(seed_folder, f"gen_{gen}.csv")
             offsprings = [mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE)]
             combined_population = population + offsprings
 
@@ -91,8 +89,10 @@ def evolutionary_strategy(seed):
             population_with_fitness = list(zip(combined_population, fitness_values))
             population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
             
-            utils.save_structure(gen+1, population_with_fitness, csv_filename)
-
+            try:
+                utils.save_structure(population_with_fitness, csv_filename)
+            except :
+                print("Error writing to CSV file. Skipping save.")
             if population_with_fitness[0][1] > best_fitness:
                 best_fitness = population_with_fitness[0][1]
                 best_global = population_with_fitness[0][0].copy()
@@ -107,6 +107,8 @@ def evolutionary_strategy(seed):
         print("\n[INFO] Interrupted by user. Saving current state...")
         if 'population_with_fitness' in locals():
             utils.save_structure(gen+1, population_with_fitness, csv_filename)
+    except RuntimeError as e:
+        print(e)
     finally:
         return best_global, best_fitness
 
@@ -131,7 +133,8 @@ def mutate(parent, max_attempts=5):
         if is_connected(child) and has_actuator(child):
             return child
 
-    return child
+    print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
+    return parent  # Return the original parent if no valid mutation is found
 
 
 def run_es(seed):
@@ -151,6 +154,7 @@ def run_es(seed):
         print("No valid robot was evolved.")
 
 if __name__ == "__main__":
-    for seed in utils.seed_list:
-        utils.set_seed(seed)
-        run_es(seed)
+    # for seed in utils.seed_list:
+    #     utils.set_seed(seed)
+    #     run_es(seed)^
+    run_es(42)
