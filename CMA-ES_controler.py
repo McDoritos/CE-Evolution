@@ -16,7 +16,7 @@ os.makedirs("gen_data_controllers", exist_ok=True)
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SCENARIO = 'DownStepper-v0'
-SEED = 42
+SEED = 2025 #123 #42
 POPULATION_SIZE = 10 # 10 > 20 
 OFFSPRING_SIZE = 20
 np.random.seed(SEED)
@@ -85,6 +85,7 @@ def cma_fitness_wrapper(vector):
     weights = vector_to_weights(vector, weight_shapes)
     return -evaluate_fitness(weights)  # CMA-ES minimiza, então é invertida a fitness
 
+
 try:
     # Initializing CMA-ES
     initial_params = weights_to_vector([np.random.randn(*s) for s in weight_shapes])
@@ -96,26 +97,31 @@ try:
     best_individual_reward = -np.inf
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = os.path.join("gen_data_controllers", f"CMAES-Controller_evolution-data_{timestamp}.csv")
+    csv_filename = os.path.join("gen_data_controllers", f"CMAES-Controller_evolution-data_seed-{SEED}_{timestamp}.csv")
 
     for gen in trange(NUM_GENERATIONS, desc="CMA-ES Optimization"):
         # 1 - Generates solutions
         solutions = es.ask()
 
         # 2 - Evaluates solutions
-        fitness = [cma_fitness_wrapper(x) for x in solutions]
-
-        population_with_fitness = list(zip(solutions, fitness))
-        population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
+        raw_fitness = [cma_fitness_wrapper(x) for x in solutions]  # Valores negativos (CMA-ES minimiza)
+        real_fitness = [-f for f in raw_fitness]  # Converte para valores reais
+        
+        # Prepara dados para salvar (com fitness reais)
+        population_with_fitness = [
+            (vector_to_weights(x, weight_shapes), f) 
+            for x, f in zip(solutions, real_fitness)  # Usa real_fitness aqui
+        ]
+        population_with_fitness.sort(key=lambda x: x[1], reverse=True)
 
         utils.save_controllers(gen+1, population_with_fitness, csv_filename)
 
         # 3 - Updates the strategy with the results (covariance matrix and sigma (step length))
-        es.tell(solutions, fitness)
+        es.tell(solutions, raw_fitness)
 
         # 4 - Anotates the best fitness, the mean and the best individual
         current_best = -es.best.f
-        current_mean = -np.mean(fitness)
+        current_mean = -np.mean(raw_fitness)
         
         if current_best > best_individual_reward:
             best_individual_reward = current_best
