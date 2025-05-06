@@ -63,21 +63,11 @@ def create_random_robot():
     random_robot, _ = sample_robot(grid_size)
     return random_robot
 
-def evolutionary_strategy(seed):
+def evolutionary_strategy(seed_folder):
     try:
         population = [create_random_robot() for _ in range(POPULATION_SIZE)]
         best_global = None
         best_fitness = -np.inf
-
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        es_folder = os.path.join(base_dir, f"ES_Structure")
-        os.makedirs(es_folder, exist_ok=True)
-
-        scenario_folder = os.path.join(es_folder, SCENARIO)
-        os.makedirs(scenario_folder, exist_ok=True)
-
-        seed_folder = os.path.join(scenario_folder, f"seed_{seed}")
-        os.makedirs(seed_folder, exist_ok=True)
 
         for gen in trange(NUM_GENERATIONS, desc=f"ES Structure {seed}", unit="gen"):
             csv_filename = os.path.join(seed_folder, f"gen_{gen}.csv")
@@ -138,28 +128,30 @@ def mutate(parent, max_attempts=5):
 
 
 def run_es(seed):
-    best_robot, best_fitness = evolutionary_strategy(seed)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    es_folder = os.path.join(base_dir, f"ES_Structure")
+    os.makedirs(es_folder, exist_ok=True)
+
+    scenario_folder = os.path.join(es_folder, SCENARIO)
+    os.makedirs(scenario_folder, exist_ok=True)
+
+    seed_folder = os.path.join(scenario_folder, f"seed_{seed}_{timestamp}")
+    os.makedirs(seed_folder, exist_ok=True)
+    
+    best_robot, best_fitness = evolutionary_strategy(seed_folder)
     if best_robot is not None:
         print("Best robot structure found:")
         print(best_robot)
         print("Best fitness score:")
         print(best_fitness)
+        
 
-        for i in range(5):
-            utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
-        now = datetime.now()
-        timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
+        utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
 
-        es_folder = os.path.join(base_dir, f"ES_Structure")
-        os.makedirs(es_folder, exist_ok=True)
 
-        scenario_folder = os.path.join(es_folder, SCENARIO)
-        os.makedirs(scenario_folder, exist_ok=True)
 
-        seed_folder = os.path.join(scenario_folder, f"seed_{seed}")
-        os.makedirs(seed_folder, exist_ok=True)
-
-        gif_filename = os.path.join(seed_folder, f"es_{timestamp}.gif")
+        gif_filename = os.path.join(seed_folder, f"_best_{timestamp}.gif")
         utils.create_gif(best_robot, filename=gif_filename, scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
     else:
         print("No valid robot was evolved.")
