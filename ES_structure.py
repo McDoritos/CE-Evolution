@@ -114,12 +114,12 @@ def evolutionary_strategy(seed):
 
 
 def mutate(parent, max_attempts=5):
-    child = copy.deepcopy(parent)
-    shape = child.shape
-    total_cells = child.size
+    shape = parent.shape
+    total_cells = parent.size
     num_mutations = int(total_cells * MUTATION)
 
     for _ in range(max_attempts):
+        child = copy.deepcopy(parent)
         child = child.flatten()
         indices = random.sample(range(total_cells), num_mutations)
 
@@ -133,7 +133,7 @@ def mutate(parent, max_attempts=5):
         if is_connected(child) and has_actuator(child):
             return child
 
-    print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
+    #print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
     return parent  # Return the original parent if no valid mutation is found
 
 
@@ -149,7 +149,18 @@ def run_es(seed):
             utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
         now = datetime.now()
         timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
-        utils.create_gif(best_robot, filename=f'es_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
+
+        es_folder = os.path.join(base_dir, f"ES_Structure")
+        os.makedirs(es_folder, exist_ok=True)
+
+        scenario_folder = os.path.join(es_folder, SCENARIO)
+        os.makedirs(scenario_folder, exist_ok=True)
+
+        seed_folder = os.path.join(scenario_folder, f"seed_{seed}")
+        os.makedirs(seed_folder, exist_ok=True)
+
+        gif_filename = os.path.join(seed_folder, f"es_{timestamp}.gif")
+        utils.create_gif(best_robot, filename=gif_filename, scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
     else:
         print("No valid robot was evolved.")
 
