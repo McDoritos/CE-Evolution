@@ -21,8 +21,8 @@ SCENARIO = 'Walker-v0'
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 MAX_MUTATION = 0.5
-MIN_MUTATION = 0.08
-MUTATION = 0.15
+MIN_MUTATION = 0.1
+MUTATION = 0.10
 POPULATION_SIZE = 10
 OFFSPRING_SIZE = 20
 # ---- VOXEL TYPES ----
@@ -76,11 +76,11 @@ def evolutionary_strategy(seed_folder):
 
                 # Use a logarithmic decay: starts high, decreases slowly
             #decay_factor = math.log(gen + 1) / math.log(NUM_GENERATIONS)
-            decay_factor = 1 / (1 + math.exp(-10 * (gen / NUM_GENERATIONS - 0.5)))
-
-            mutation_rate = MAX_MUTATION - (MAX_MUTATION - MIN_MUTATION) * decay_factor 
-            print(f"Mutation rate: {mutation_rate:.4f}")
+            # decay_factor = 1 / (1 + math.exp(-10 * (gen / NUM_GENERATIONS - 0.5)))
+            # mutation_rate = MAX_MUTATION - (MAX_MUTATION - MIN_MUTATION) * decay_factor 
+            # print(f"Mutation rate: {mutation_rate:.4f}")
            
+            mutation_rate = MUTATION
             offsprings = [mutate(random.choice(population), mutation_rate) for _ in range(OFFSPRING_SIZE)]
             combined_population = population + offsprings
 
@@ -168,14 +168,14 @@ def run_es(seed):
         print("No valid robot was evolved.")
 
 if __name__ == "__main__":
-    # for scenario in utils.scenarios:
-    #     SCENARIO = scenario
-    #     for seed in utils.seed_list:
-    #         print(f"Running ES with scenario: {SCENARIO} and seed: {seed}")
-    #         utils.set_seed(seed)
-    #         run_es(seed)
-    SCENARIO = utils.scenarios[0]
-    seed = 42
-    utils.set_seed(seed)
-    run_es(seed)
+    #for scenario in utils.scenarios_3_1[1]:
+        SCENARIO = utils.scenarios_3_1[1]
+        for seed in utils.seed_list:
+            print(f"Running ES with scenario: {SCENARIO} and seed: {seed}")
+            utils.set_seed(seed)
+            run_es(seed)
+    # SCENARIO = utils.scenarios[0]
+    # seed = 42
+    # utils.set_seed(seed)
+    # run_es(seed)
 

@@ -78,6 +78,7 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
 
 
 # Added by us
+scenarios_3_1 = ["Walker-v0", "BridgeWalker-v0"]
 scenarios = ["Walker-v0", "DownStepper-v0"]
 seed_list = [42, 123, 2025, 8675309, 123456789]
 

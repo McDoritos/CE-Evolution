@@ -1,18 +1,17 @@
 import datetime
 import numpy as np
 import random
-import copy
 import gymnasium as gym
 from evogym.envs import *
 
 from evogym import EvoWorld, EvoSim, EvoViewer, sample_robot, get_full_connectivity, is_connected
 import utils
 from fixed_controllers import *
-import multiprocessing
 from tqdm import trange
 from datetime import datetime
 import os
 
+base_dir = "gen_data_structures"
 os.makedirs("gen_data_structures", exist_ok=True)
 
 
@@ -29,8 +28,6 @@ ELITE = 10
 VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)
 
 CONTROLLER = alternating_gait
-
-printS = []
 
 def evaluate_fitness(robot_structure, view=False):    
     try:
@@ -70,15 +67,11 @@ def create_random_robot():
     return random_robot
 
 
-def genetic_algorithm():
+def genetic_algorithm(seed_folder):
     try:
-        global printS
         population = [create_random_robot() for _ in range(POP)]
         best_global = None
         best_fitness = -np.inf
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = os.path.join("gen_data_structures", f"GA-Structure_evolution-data_{timestamp}.csv")
 
         for gen in trange(NUM_GENERATIONS, desc='Evolving GA ', unit='gen'):
             #with multiprocessing.Pool() as pool:
@@ -88,13 +81,14 @@ def genetic_algorithm():
             population_with_fitness = list(zip(population, fitness_values))
             population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
 
-            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+            csv_filename = os.path.join(seed_folder, f"gen_{gen}.csv")
+            utils.save_structure(population_with_fitness, csv_filename)
 
             if population_with_fitness[0][1] > best_fitness:
                 best_fitness = population_with_fitness[0][1]
                 best_global = population_with_fitness[0][0].copy()
             
-            #printS.append(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
+            #print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
             
             print(f"Gen {gen+1}, Best: {best_fitness:.4f}, Avg: {np.mean(fitness_values):.4f}")
 
@@ -112,7 +106,7 @@ def genetic_algorithm():
             population = new_population
 
     except KeyboardInterrupt:
-        #printS.append("\n[INFO] Interrupted by user. Finalizing with current best found...")
+        #print("\n[INFO] Interrupted by user. Finalizing with current best found...")
         
         print("\n[INFO] Interrupted by user. Finalizing with current best found...")
         
@@ -162,29 +156,38 @@ def mutate(individual, mutation_rate, max_attempts=5):
 
 
 def run_ga():
-    global printS
-    best_robot, best_fitness = genetic_algorithm()
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    ga_folder = os.path.join(base_dir, f"GA_Structure")
+    os.makedirs(ga_folder, exist_ok=True)
+
+    scenario_folder = os.path.join(ga_folder, SCENARIO)
+    os.makedirs(scenario_folder, exist_ok=True)
+
+    seed_folder = os.path.join(scenario_folder, f"seed_{seed} - {timestamp}")
+    os.makedirs(seed_folder, exist_ok=True)
+
+    best_robot, best_fitness = genetic_algorithm(seed_folder)
     if best_robot is not None:
-        printS.append("Best robot structure found:")
-        printS.append(best_robot)
-        printS.append("Best fitness score:")
-        printS.append(best_fitness)
+        print("Best robot structure found:")
+        print(best_robot)
+        print("Best fitness score:")
+        print(best_fitness)
 
         for i in range(5):
             utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
         now = datetime.now()
         timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
         utils.create_gif(best_robot, filename=f'ga_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)    
+        utils.save_plot(seed_folder, SCENARIO, seed)
     else:
-        printS.append("No valid robot was evolved.")
+        print("No valid robot was evolved.")
 
-    for s in printS:
-        print(s)   
 
 if __name__ == "__main__":
-    # Set the seed for reproducibility
-    multiprocessing.freeze_support()
-
-    for seed in utils.seed_list:
-        utils.set_seed(utils.seed_list[0])
-        run_ga()
+    for scenario in utils.scenarios_3_1:
+        SCENARIO = scenario
+        for seed in utils.seed_list:
+            utils.set_seed(seed)
+            run_ga()
