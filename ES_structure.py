@@ -136,7 +136,7 @@ def run_es(seed):
     scenario_folder = os.path.join(es_folder, SCENARIO)
     os.makedirs(scenario_folder, exist_ok=True)
 
-    seed_folder = os.path.join(scenario_folder, f"seed_{seed}_{timestamp}")
+    seed_folder = os.path.join(scenario_folder, f"seed_{seed} - {timestamp}")
     os.makedirs(seed_folder, exist_ok=True)
     
     best_robot, best_fitness = evolutionary_strategy(seed_folder)
@@ -151,12 +151,16 @@ def run_es(seed):
 
 
 
-        gif_filename = os.path.join(seed_folder, f"_best_{timestamp}.gif")
+        gif_filename = os.path.join(seed_folder, f"_best.gif")
         utils.create_gif(best_robot, filename=gif_filename, scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
     else:
         print("No valid robot was evolved.")
 
 if __name__ == "__main__":
-    for seed in utils.seed_list:
-        utils.set_seed(seed)
-        run_es(seed)
+    for scenario in utils.scenarios:
+        SCENARIO = scenario
+        for seed in utils.seed_list:
+            print(f"Running ES with scenario: {SCENARIO} and seed: {seed}")
+            utils.set_seed(seed)
+            run_es(seed)
+

@@ -32,3 +32,5 @@ def hopping_motion(action_size, t):
     else:
         action[:] = -1  # Contract all active voxels
     return action
+
+controllers = [alternating_gait, sinusoidal_wave, hopping_motion]
