@@ -1,8 +1,11 @@
 import random
+import re
+from matplotlib import pyplot as plt
 import numpy as np
 import gymnasium as gym
 from evogym import EvoViewer, get_full_connectivity
 import imageio
+import pandas as pd
 import torch
 from fixed_controllers import *
 
@@ -129,3 +132,51 @@ def save_controllers(generation, population_with_fitness, filename="evolution_da
                  for w in controller]
             )
             writer.writerow([generation, idx, fitness, controller_str])
+
+
+
+def collect_fitness_data(seed_folder):
+    gen_files = [f for f in os.listdir(seed_folder) if re.match(r'gen_\d+\.csv', f)]
+    fitness_summary = []
+
+    for file in sorted(gen_files, key=lambda x: int(re.search(r'\d+', x).group())):
+        gen_num = int(re.search(r'\d+', file).group())
+        df = pd.read_csv(os.path.join(seed_folder, file))
+        fitness_values = df['Fitness'].values
+
+        fitness_summary.append({
+            'Generation': gen_num,
+            'Best': max(fitness_values),
+            'Average': sum(fitness_values) / len(fitness_values),
+            'Worst': min(fitness_values)
+        })
+
+    return pd.DataFrame(fitness_summary)
+
+def save_plot(seed_folder, scenario, seed): 
+    fitness_df = collect_fitness_data(seed_folder)
+    if fitness_df.empty:
+        print(f"No data to plot in {seed_folder}")
+        return
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(fitness_df['Generation'], fitness_df['Best'], label='Best Fitness', marker='o')
+    plt.plot(fitness_df['Generation'], fitness_df['Average'], label='Average Fitness', marker='x')
+    plt.plot(fitness_df['Generation'], fitness_df['Worst'], label='Worst Fitness', marker='s')
+
+    plt.title("ES | " + scenario  + f" | Seed {seed} Fitness Over Generations")
+    plt.xlabel('Generation')
+    plt.ylabel('Fitness')
+    plt.legend()
+    plt.grid(True)
+    plt.ylim(-5, 12)  # <--- This line sets the y-axis range
+    plt.tight_layout()
+
+
+    # Save the plot
+    plot_path = os.path.join(seed_folder, "fitness_plot.png")
+    if os.path.exists(plot_path):
+        os.remove(plot_path)
+    plt.savefig(plot_path)
+    plt.close()
+    print(f"Saved plot to: {plot_path}")

@@ -20,7 +20,9 @@ SCENARIO = 'Walker-v0'
 
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
-MUTATION = 0.1
+MAX_MUTATION = 0.5
+MIN_MUTATION = 0.08
+MUTATION = 0.15
 POPULATION_SIZE = 10
 OFFSPRING_SIZE = 20
 # ---- VOXEL TYPES ----
@@ -71,7 +73,15 @@ def evolutionary_strategy(seed_folder):
 
         for gen in trange(NUM_GENERATIONS, desc=f"ES Structure {seed}", unit="gen"):
             csv_filename = os.path.join(seed_folder, f"gen_{gen}.csv")
-            offsprings = [mutate(random.choice(population)) for _ in range(OFFSPRING_SIZE)]
+
+                # Use a logarithmic decay: starts high, decreases slowly
+            #decay_factor = math.log(gen + 1) / math.log(NUM_GENERATIONS)
+            decay_factor = 1 / (1 + math.exp(-10 * (gen / NUM_GENERATIONS - 0.5)))
+
+            mutation_rate = MAX_MUTATION - (MAX_MUTATION - MIN_MUTATION) * decay_factor 
+            print(f"Mutation rate: {mutation_rate:.4f}")
+           
+            offsprings = [mutate(random.choice(population), mutation_rate) for _ in range(OFFSPRING_SIZE)]
             combined_population = population + offsprings
 
             fitness_values = [evaluate_fitness(individual) for individual in combined_population]
@@ -103,10 +113,11 @@ def evolutionary_strategy(seed_folder):
         return best_global, best_fitness
 
 
-def mutate(parent, max_attempts=5):
+def mutate(parent, mutation_rate, max_attempts=5):
     shape = parent.shape
     total_cells = parent.size
-    num_mutations = int(total_cells * MUTATION)
+
+    num_mutations = max(1, int(total_cells * mutation_rate))
 
     for _ in range(max_attempts):
         child = copy.deepcopy(parent)
@@ -123,8 +134,7 @@ def mutate(parent, max_attempts=5):
         if is_connected(child) and has_actuator(child):
             return child
 
-    #print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
-    return parent  # Return the original parent if no valid mutation is found
+    return parent
 
 
 def run_es(seed):
@@ -152,15 +162,20 @@ def run_es(seed):
 
 
         gif_filename = os.path.join(seed_folder, f"_best.gif")
-        utils.create_gif(best_robot, filename=gif_filename, scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)                                                                                 
+        utils.create_gif(best_robot, filename=gif_filename, scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)  
+        utils.save_plot(seed_folder, SCENARIO, seed)  # Save the plot                                                                          
     else:
         print("No valid robot was evolved.")
 
 if __name__ == "__main__":
-    for scenario in utils.scenarios:
-        SCENARIO = scenario
-        for seed in utils.seed_list:
-            print(f"Running ES with scenario: {SCENARIO} and seed: {seed}")
-            utils.set_seed(seed)
-            run_es(seed)
+    # for scenario in utils.scenarios:
+    #     SCENARIO = scenario
+    #     for seed in utils.seed_list:
+    #         print(f"Running ES with scenario: {SCENARIO} and seed: {seed}")
+    #         utils.set_seed(seed)
+    #         run_es(seed)
+    SCENARIO = utils.scenarios[0]
+    seed = 42
+    utils.set_seed(seed)
+    run_es(seed)
 
