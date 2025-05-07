@@ -16,7 +16,7 @@ os.makedirs("gen_data_controllers", exist_ok=True)
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SCENARIO = 'DownStepper-v0'
-SEED = 2025 #123 #42
+SEED = 314159 #8675309 #2025 #123 #42
 POPULATION_SIZE = 10 # 10 > 20 
 OFFSPRING_SIZE = 20
 np.random.seed(SEED)

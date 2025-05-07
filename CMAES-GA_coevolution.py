@@ -6,6 +6,7 @@ from evogym import EvoWorld, EvoSim, EvoViewer, sample_robot, get_full_connectiv
 from neural_controller import *
 from tqdm import trange
 from fixed_controllers import *
+import cma
 
 # Configurações
 NUM_GENERATIONS = 100
@@ -34,9 +35,9 @@ class CoEvolution:
         # Inicializa populações
         self.pop_struc = [self.create_random_robot() for _ in range(pop_size_struc)]
         env = gym.make(SCENARIO, body=self.pop_struc[0])  # Usa a primeira estrutura como exemplo
-        input_size = env.observation_space.shape[0]
-        output_size = env.action_space.shape[0]
-        self.brain_template = NeuralController(input_size, output_size)
+        self.FIXED_INPUT_SIZE = env.observation_space.shape[0]
+        self.FIXED_OUTPUT_SIZE = 10
+        self.brain_template = NeuralController(self.FIXED_INPUT_SIZE, self.FIXED_OUTPUT_SIZE)
         self.pop_con = [[np.random.randn(*p.shape) for p in self.brain_template.parameters()] 
                     for _ in range(pop_size_con)]
         env.close()
@@ -47,7 +48,19 @@ class CoEvolution:
         
         self.best_struc = None
         self.best_con = None
-        self.best_fitness = -np.infz
+        self.best_fitness = -np.inf
+        self.init_cma_es()
+
+    def init_cma_es(self):
+        example_weights = [p.data.numpy() for p in self.brain_template.parameters()]
+        self.weight_shapes = [w.shape for w in example_weights]
+        initial_params = np.concatenate([w.flatten() for w in example_weights])
+        
+        self.cma_es = cma.CMAEvolutionStrategy(
+            initial_params,
+            0.5,  # Sigma inicial (ajuste conforme necessário)
+            {'popsize': self.pop_size_con, 'seed': SEED}
+        )
 
     def evaluate_struc(self, robot_structure, controller_weights, view=False):    
         try:
@@ -55,8 +68,13 @@ class CoEvolution:
             env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
             input_size = env.observation_space.shape[0]
             output_size = env.action_space.shape[0]
-            
-            brain = NeuralController(input_size, output_size)
+
+            if input_size != self.FIXED_INPUT_SIZE or output_size != self.FIXED_OUTPUT_SIZE:
+                env.close()
+                penalty = -abs(input_size - self.FIXED_INPUT_SIZE) - abs(output_size - self.FIXED_OUTPUT_SIZE)
+                return penalty
+
+            brain = NeuralController(self.FIXED_INPUT_SIZE, self.FIXED_OUTPUT_SIZE)
             set_weights(brain, controller_weights)
             
             state = env.reset()[0]
@@ -81,7 +99,8 @@ class CoEvolution:
             env.close()
             return total_reward
         except Exception as e:
-            return 0.0
+            print(f"Error in evaluation: {str(e)}")
+            return -1000
         
     def evaluate_con(self, controller_weights, robot_structure, view=False):
         return self.evaluate_struc(robot_structure, controller_weights, view)
@@ -92,6 +111,16 @@ class CoEvolution:
                      random.randint(MIN_GRID_SIZE[1], MAX_GRID_SIZE[1]))
         random_robot, _ = sample_robot(grid_size)
         return random_robot
+    
+    def vector_to_weights(self, vector):
+        """Converte um vetor plano do CMA-ES para pesos da rede neural"""
+        weights = []
+        idx = 0
+        for shape in self.weight_shapes:
+            size = np.prod(shape)
+            weights.append(vector[idx:idx+size].reshape(shape))
+            idx += size
+        return weights
     
     def has_actuator(self, structure):
         return np.any((structure == 3) | (structure == 4))
@@ -135,40 +164,38 @@ class CoEvolution:
         self.fitness_con = []
         self.pairings = []
         
-        # 1 - Evaluate structures with best controller
+        # 1 - Avalia estruturas com o melhor controlador atual
+        best_con = self.best_con if self.best_con is not None else random.choice(self.pop_con)
         for structure in self.pop_struc:
-            if len(self.fitness_con) == 0:
-                partner = random.choice(self.pop_con)
-            else:
-                best_con_idx = np.argmax(self.fitness_con)
-                partner = self.pop_con[best_con_idx]
-            
-            fit = self.evaluate_struc(structure, partner)
+            fit = self.evaluate_struc(structure, best_con)
             self.fitness_struc.append(fit)
-            self.pairings.append((structure, partner, fit))
+            self.pairings.append((structure, best_con, fit))
+        
+        # Gera e avalia nova população de controladores
+        solutions = self.cma_es.ask()
+        best_struc = self.pop_struc[np.argmax(self.fitness_struc)] if self.fitness_struc else random.choice(self.pop_struc)
+        
+        fitness = []
+        for x in solutions:
+            weights = self.vector_to_weights(x)
+            fit = self.evaluate_con(weights, best_struc)
+            fitness.append(-fit)  # CMA-ES minimiza
+            self.pairings.append((best_struc, weights, fit))
+        
+        self.cma_es.tell(solutions, fitness)
+        self.pop_con = [self.vector_to_weights(x) for x in solutions]
+        self.fitness_con = [-f for f in fitness]  # Converte de volta para valores positivos
 
-        # 2 - Evaluate controllers with best structure
-        for controller in self.pop_con:
-            if len(self.fitness_struc) == 0:
-                partner = random.choice(self.pop_struc)
-            else:
-                best_struc_idx = np.argmax(self.fitness_struc)
-                partner = self.pop_struc[best_struc_idx]
-            
-            fit = self.evaluate_con(controller, partner)
-            self.fitness_con.append(fit)
-            self.pairings.append((partner, controller, fit))
-
-        # 3 - Find best pair
+        # 3 - Encontra o melhor par
         best_struc, best_con, best_fit = max(self.pairings, key=lambda x: x[2])
         
-        # 4 - Updates Global best
+        # 4 - Atualiza o melhor global
         if best_fit > self.best_fitness:
             self.best_fitness = best_fit
             self.best_struc = best_struc.copy()
             self.best_con = best_con.copy()
         
-        # Selection and Elitism for structures
+        # 5 - Seleção para estruturas (mantido original)
         elite_indices = np.argsort(self.fitness_struc)[-self.elite:]
         new_pop_struc = [self.pop_struc[i].copy() for i in elite_indices]
         
@@ -178,22 +205,9 @@ class CoEvolution:
             child = self.mutate_struc(child)
             new_pop_struc.append(child)
         
-        # Selection and Elitism for controllers
-        combined_con = list(zip(self.pop_con, self.fitness_con))
-        combined_con.sort(key=lambda x: x[1], reverse=True)
-        elite_con = [x[0] for x in combined_con[:self.elite]]
-        
-        new_pop_con = elite_con.copy()
-        while len(new_pop_con) < self.pop_size_con:
-            parent = random.choice(elite_con)
-            child = self.mutate_con(parent)
-            new_pop_con.append(child)
-        
-        new_pop_struc[0] = best_struc.copy()
-        new_pop_con[0] = best_con.copy()
-        
+        # 6 - Elitismo para controladores (agora desnecessário, pois o CMA-ES já faz seleção)
+        # Mantemos apenas para garantir a população ter tamanho correto
         self.pop_struc = new_pop_struc
-        self.pop_con = new_pop_con
         
         return (best_struc.copy(), best_con.copy()), best_fit
 
