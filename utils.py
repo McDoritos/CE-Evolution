@@ -79,7 +79,7 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
 
 # Added by us
 scenarios_3_1 = ["Walker-v0", "BridgeWalker-v0"]
-scenarios = ["Walker-v0", "DownStepper-v0"]
+scenarios_3_2 = ["DownStepper-v0", "ObstacleTraverser-v0"]
 seed_list = [42, 123, 2025, 8675309, 123456789]
 
 def set_seed(seed: int):
@@ -133,6 +133,24 @@ def save_controllers(generation, population_with_fitness, filename="evolution_da
                  for w in controller]
             )
             writer.writerow([generation, idx, fitness, controller_str])
+
+def save_controller(population_with_fitness, filename="evolution_data.csv"):
+    """Save generation data to a CSV file."""
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        if not file_exists:
+            writer.writerow(["Individual", "Fitness", "Controller"])
+            
+        for idx, (controller, fitness) in enumerate(population_with_fitness):
+            controller_str = ";".join(
+                [",".join(map(str, w.flatten())) 
+                 for w in controller]
+            )
+            writer.writerow([idx, fitness, controller_str])
+
 
 
 

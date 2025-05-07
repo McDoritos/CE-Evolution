@@ -177,8 +177,7 @@ def run_ga():
 
         for i in range(5):
             utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
-        now = datetime.now()
-        timestamp = now.strftime("%d-%m")  # Format: day-month, e.g., "10-04"
+        
         utils.create_gif(best_robot, filename=f'ga_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)    
         utils.save_plot(seed_folder, SCENARIO, seed)
     else:
