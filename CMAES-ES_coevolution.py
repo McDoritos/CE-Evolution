@@ -7,6 +7,7 @@ from neural_controller import *
 from tqdm import trange
 from fixed_controllers import *
 import cma
+import copy
 
 # Configurações
 NUM_GENERATIONS = 100
@@ -26,13 +27,11 @@ random.seed(SEED)
 torch.manual_seed(SEED)
 
 class CoEvolution:
-    def __init__(self, pop_size_struc=20, pop_size_con=20, elite=5, mutation=0.05, offspring_size_con=20):
+    def __init__(self, pop_size_struc=10, offspring_size=20, pop_size_con=20, elite=5, mutation=0.1):
         self.pop_size_struc = pop_size_struc
         self.pop_size_con = pop_size_con
-        self.offspring_size_con = offspring_size_con
-        self.elite = elite
         self.mutation = mutation
-        
+        self.offspring_size = offspring_size
         # Best structure from 3.1 scenario
         robot_struc = np.array([ 
             [1,3,3,3,1],
@@ -44,7 +43,7 @@ class CoEvolution:
         # Inicializa populações
         self.pop_struc = [self.create_random_robot() for _ in range(pop_size_struc)]
 
-        env = gym.make(SCENARIO, body=robot_struc)  # Usa a primeira estrutura como exemplo
+        env = gym.make(SCENARIO, body=robot_struc)
         self.FIXED_INPUT_SIZE = env.observation_space.shape[0]
         self.FIXED_OUTPUT_SIZE = env.action_space.shape[0]
         print(self.FIXED_INPUT_SIZE,self.FIXED_OUTPUT_SIZE)
@@ -70,7 +69,7 @@ class CoEvolution:
         
         self.cma_es = cma.CMAEvolutionStrategy(
             initial_params,
-            0.5,  # Sigma inicial (ajuste conforme necessário)
+            0.5,
             {'popsize': self.pop_size_con, 'seed': SEED}
         )
 
@@ -136,52 +135,67 @@ class CoEvolution:
     def has_actuator(self, structure):
         return np.any((structure == 3) | (structure == 4))
     
-    def crossover_struc(self, parent1, parent2, max_attempts=10):
+    def mutate(self,parent, max_attempts=5):
+        shape = parent.shape
+        total_cells = parent.size
+        num_mutations = int(total_cells * self.mutation)
+
         for _ in range(max_attempts):
-            mask = np.random.randint(0, 2, size=parent1.shape)  
-            child = np.where(mask, parent2, parent1)  
-            
-            if is_connected(child) and self.has_actuator(child):
+            child = copy.deepcopy(parent)
+            child = child.flatten()
+            indices = random.sample(range(total_cells), num_mutations)
+
+            for idx in indices:
+                current_value = child[idx]
+                choices = [v for v in VOXEL_TYPES if v != current_value]
+                child[idx] = random.choice(choices)
+
+            child = child.reshape(shape)
+
+            if is_connected(child) and has_actuator(child):
                 return child
-        
-        return parent1 if random.random() < 0.5 else parent2
 
-    def tournament_selection(self, population, fitness_values, k=5):
-        selected_indices = random.sample(range(len(population)), k)
-        selected = [(population[i], fitness_values[i]) for i in selected_indices]
-        selected.sort(key=lambda x: x[1], reverse=True)
-        return selected[0][0], selected[1][0]
-
-    def mutate_struc(self, individual, max_attempts=5):
-        original = individual.copy()
-        
+        #print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
+        return parent
+    
+    def mutate_more_aggressively(self, parent, max_attempts=5):
+        shape = parent.shape
         for _ in range(max_attempts):
-            mutated = individual.copy()
-            for i in range(mutated.shape[0]):
-                for j in range(mutated.shape[1]):
-                    if random.random() < self.mutation:
-                        mutated[i,j] = random.choice(VOXEL_TYPES)
-            
-            if is_connected(mutated) and self.has_actuator(mutated):
-                return mutated
-        
-        return original
+            child = parent.copy()
+
+            # Número aleatório de mutações (1 a 30% do total de células)
+            num_mutations = random.randint(1, int(0.3 * child.size))
+
+            for _ in range(num_mutations):
+                x, y = random.randint(0, shape[0]-1), random.randint(0, shape[1]-1)
+                current = child[x, y]
+                choices = [v for v in VOXEL_TYPES if v != current]
+                child[x, y] = random.choice(choices)
+
+            if is_connected(child) and has_actuator(child):
+                return child
+
+        return parent
     
     def best_pairing(self):
         self.fitness_struc = []
         self.fitness_con = []
         self.pairings = []
         
-        # 1 - Avalia estruturas com o melhor controlador atual
+        # 1 - Avalia estruturas com o melhor controlador
         best_con = self.best_con if self.best_con is not None else random.choice(self.pop_con)
-        for structure in self.pop_struc:
+
+        offsprings = [self.mutate(random.choice(self.pop_struc)) for _ in range(self.offspring_size)]
+        combined_population = self.pop_struc + offsprings
+
+        for structure in combined_population:
             fit = self.evaluate_struc(structure, best_con)
             self.fitness_struc.append(fit)
             self.pairings.append((structure, best_con, fit))
         
         # Gera e avalia nova população de controladores
         solutions = self.cma_es.ask()
-        best_struc = self.pop_struc[np.argmax(self.fitness_struc)] if self.fitness_struc else random.choice(self.pop_struc)
+        best_struc = combined_population[np.argmax(self.fitness_struc)] if self.fitness_struc else random.choice(combined_population)
         
         fitness = []
         for x in solutions:
@@ -203,19 +217,8 @@ class CoEvolution:
             self.best_struc = best_struc.copy()
             self.best_con = best_con.copy()
         
-        # 5 - Seleção para estruturas (mantido original)
-        elite_indices = np.argsort(self.fitness_struc)[-self.elite:]
-        new_pop_struc = [self.pop_struc[i].copy() for i in elite_indices]
-        
-        while len(new_pop_struc) < self.pop_size_struc:
-            p1, p2 = self.tournament_selection(self.pop_struc, self.fitness_struc)
-            child = self.crossover_struc(p1, p2)
-            child = self.mutate_struc(child)
-            new_pop_struc.append(child)
-        
-        # 6 - Elitismo para controladores (agora desnecessário, pois o CMA-ES já faz seleção)
-        # Mantemos apenas para garantir a população ter tamanho correto
-        self.pop_struc = new_pop_struc.copy()
+        sorted_population = [x for _, x in sorted(zip(self.fitness_struc, combined_population), key=lambda pair: pair[0], reverse=True)]
+        self.pop_struc = sorted_population[:POPULATION_SIZE]
         
         return (best_struc.copy(), best_con.copy()), best_fit
     
@@ -224,8 +227,11 @@ class CoEvolution:
         self.fitness_con = []
         self.pairings = []
         
+
+        offsprings = [self.mutate(random.choice(self.pop_struc)) for _ in range(self.offspring_size)]
+        combined_population = self.pop_struc + offsprings
         # 1 - Avalia estruturas com o melhor controlador atual
-        for structure in self.pop_struc:
+        for structure in combined_population:
             partner = random.choice(self.pop_con)
             fit = self.evaluate_struc(structure, partner)
             self.fitness_struc.append(fit)
@@ -236,7 +242,7 @@ class CoEvolution:
         
         fitness = []
         for x in solutions:
-            partner = random.choice(self.pop_struc)
+            partner = random.choice(combined_population)
             weights = self.vector_to_weights(x)
             fit = self.evaluate_con(weights, partner)
             fitness.append(-fit)  # CMA-ES minimiza
@@ -256,25 +262,14 @@ class CoEvolution:
             self.best_struc = best_struc.copy()
             self.best_con = best_con.copy()
         
-        # 5 - Seleção para estruturas (mantido original)
-        elite_indices = np.argsort(self.fitness_struc)[-self.elite:]
-        new_pop_struc = [self.pop_struc[i].copy() for i in elite_indices]
-        
-        while len(new_pop_struc) < self.pop_size_struc:
-            p1, p2 = self.tournament_selection(self.pop_struc, self.fitness_struc)
-            child = self.crossover_struc(p1, p2)
-            child = self.mutate_struc(child)
-            new_pop_struc.append(child)
-        
-        # 6 - Elitismo para controladores (agora desnecessário, pois o CMA-ES já faz seleção)
-        # Mantemos apenas para garantir a população ter tamanho correto
-        self.pop_struc = new_pop_struc.copy()
+        sorted_population = [x for _, x in sorted(zip(self.fitness_struc, combined_population), key=lambda pair: pair[0], reverse=True)]
+        self.pop_struc = sorted_population[:POPULATION_SIZE]
         
         return (best_struc.copy(), best_con.copy()), best_fit
 
     def evolve(self, generations):
         for gen in trange(generations, desc="Co-evolving"):
-            (best_struc, best_con), best_fit = self.random_pairing()
+            (best_struc, best_con), best_fit = self.best_pairing()
             print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f} ; Best Fitness (gen) = {best_fit:.4f}")
         
         return self.best_struc, self.best_con, self.best_fitness
@@ -288,6 +283,8 @@ if __name__ == "__main__":
     print(f"Best Fitness: {best_fit:.4f}")
     print("Best Structure:")
     print(best_struct)
+    print("Best Controller:")
+    print(best_ctrl)
     
     # Configurar rede neural para visualização
     env = gym.make(SCENARIO, body=best_struct)
