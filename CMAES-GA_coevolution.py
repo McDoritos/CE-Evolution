@@ -44,7 +44,7 @@ class CoEvolution:
         # Inicializa populações
         self.pop_struc = [self.create_random_robot() for _ in range(pop_size_struc)]
 
-        env = gym.make(SCENARIO, body=robot_struc)  # Usa a primeira estrutura como exemplo
+        env = gym.make(SCENARIO, body=robot_struc)
         self.FIXED_INPUT_SIZE = env.observation_space.shape[0]
         self.FIXED_OUTPUT_SIZE = env.action_space.shape[0]
         print(self.FIXED_INPUT_SIZE,self.FIXED_OUTPUT_SIZE)
@@ -70,7 +70,7 @@ class CoEvolution:
         
         self.cma_es = cma.CMAEvolutionStrategy(
             initial_params,
-            0.5,  # Sigma inicial (ajuste conforme necessário)
+            0.5,
             {'popsize': self.pop_size_con, 'seed': SEED}
         )
 
@@ -172,7 +172,7 @@ class CoEvolution:
         self.fitness_con = []
         self.pairings = []
         
-        # 1 - Avalia estruturas com o melhor controlador atual
+        # 1 - Avalia estruturas com o melhor controlador
         best_con = self.best_con if self.best_con is not None else random.choice(self.pop_con)
         for structure in self.pop_struc:
             fit = self.evaluate_struc(structure, best_con)
@@ -203,7 +203,7 @@ class CoEvolution:
             self.best_struc = best_struc.copy()
             self.best_con = best_con.copy()
         
-        # 5 - Seleção para estruturas (mantido original)
+        # 5 - Seleção para estruturas
         elite_indices = np.argsort(self.fitness_struc)[-self.elite:]
         new_pop_struc = [self.pop_struc[i].copy() for i in elite_indices]
         
@@ -213,8 +213,6 @@ class CoEvolution:
             child = self.mutate_struc(child)
             new_pop_struc.append(child)
         
-        # 6 - Elitismo para controladores (agora desnecessário, pois o CMA-ES já faz seleção)
-        # Mantemos apenas para garantir a população ter tamanho correto
         self.pop_struc = new_pop_struc.copy()
         
         return (best_struc.copy(), best_con.copy()), best_fit
@@ -256,7 +254,7 @@ class CoEvolution:
             self.best_struc = best_struc.copy()
             self.best_con = best_con.copy()
         
-        # 5 - Seleção para estruturas (mantido original)
+        # 5 - Seleção para estruturas
         elite_indices = np.argsort(self.fitness_struc)[-self.elite:]
         new_pop_struc = [self.pop_struc[i].copy() for i in elite_indices]
         
@@ -266,8 +264,6 @@ class CoEvolution:
             child = self.mutate_struc(child)
             new_pop_struc.append(child)
         
-        # 6 - Elitismo para controladores (agora desnecessário, pois o CMA-ES já faz seleção)
-        # Mantemos apenas para garantir a população ter tamanho correto
         self.pop_struc = new_pop_struc.copy()
         
         return (best_struc.copy(), best_con.copy()), best_fit

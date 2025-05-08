@@ -22,7 +22,7 @@ MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
 SCENARIO = 'Walker-v0'
 POP = 50
-MUTATION = 0.05
+MUTATION = 0.1
 ELITE = 10
 # ---- VOXEL TYPES ----
 VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)

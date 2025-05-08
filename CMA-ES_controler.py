@@ -107,10 +107,9 @@ try:
         raw_fitness = [cma_fitness_wrapper(x) for x in solutions]  # Valores negativos (CMA-ES minimiza)
         real_fitness = [-f for f in raw_fitness]  # Converte para valores reais
         
-        # Prepara dados para salvar (com fitness reais)
         population_with_fitness = [
             (vector_to_weights(x, weight_shapes), f) 
-            for x, f in zip(solutions, real_fitness)  # Usa real_fitness aqui
+            for x, f in zip(solutions, real_fitness)
         ]
         population_with_fitness.sort(key=lambda x: x[1], reverse=True)
 
