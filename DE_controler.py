@@ -187,10 +187,10 @@ def visualize_policy(weights):
 def run_diferential_evolution():
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    ga_folder = os.path.join(base_dir, f"GA_Structure")
-    os.makedirs(ga_folder, exist_ok=True)
+    de_folder = os.path.join(base_dir, f"DE_controller")
+    os.makedirs(de_folder, exist_ok=True)
 
-    scenario_folder = os.path.join(ga_folder, SCENARIO)
+    scenario_folder = os.path.join(de_folder, SCENARIO)
     os.makedirs(scenario_folder, exist_ok=True)
 
     seed_folder = os.path.join(scenario_folder, f"seed_{seed} - {timestamp}")
