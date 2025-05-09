@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count
 # Configurações
 NUM_GENERATIONS = 100
 STEPS = 500
-SCENARIO = 'CaveCrawler-v0'  # CaveCrawler-v0
+SCENARIO = 'GapJumper-v0'  # CaveCrawler-v0
 SEED = 42
 POPULATION_SIZE = 20
 MUTATION_RATE = 0.1
@@ -27,7 +27,7 @@ random.seed(SEED)
 torch.manual_seed(SEED)
 
 class CoEvolution:
-    def __init__(self, pop_size_struc=3, offspring_size=3 , pop_size_con=20, elite=5, mutation=0.1):
+    def __init__(self, pop_size_struc= 10, offspring_size=10 , pop_size_con=20, elite=5, mutation=0.1):
         self.pop_size_struc = pop_size_struc
         self.pop_size_con = pop_size_con
         self.mutation = mutation
