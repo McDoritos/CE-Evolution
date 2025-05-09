@@ -82,7 +82,7 @@ def cma_es(seed_folder, weight_shapes, brain, scenario, connectivity):
     try:
         # Initializing CMA-ES
         initial_params = weights_to_vector([np.random.randn(*s) for s in weight_shapes])
-        es = cma.CMAEvolutionStrategy(initial_params, 0.5, {'seed': SEED})
+        es = cma.CMAEvolutionStrategy(initial_params, 0.3, {'seed': SEED})
 
         best_rewards = []
         mean_rewards = []
@@ -186,22 +186,33 @@ def run_seed(seed, scenario, weight_shapes, brain, connectivity):
     run_CMA_ES(seed, scenario, weight_shapes, brain, connectivity)
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
+    # multiprocessing.freeze_support()
+    # connectivity = get_full_connectivity(robot_structure)
+    # processes = []
+    # for scenario in utils.scenarios_3_2:
+    #     env = gym.make(scenario, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
+    #     sim = env.sim
+    #     input_size = env.observation_space.shape[0]  # Observation size
+    #     output_size = env.action_space.shape[0]  # Action size
+    #     brain = NeuralController(input_size, output_size)
+    #     weight_shapes = [p.shape for p in brain.parameters()]
+    #     for seed in utils.seed_list:
+    #         p = multiprocessing.Process(target=run_seed, args=(seed, scenario, weight_shapes, brain, connectivity))
+    #         p.start()
+    #         processes.append(p)
+    # for p in processes:
+    #     p.join()
+    #     processes.remove(p)
     connectivity = get_full_connectivity(robot_structure)
-    processes = []
-    for scenario in utils.scenarios_3_2:
-        env = gym.make(scenario, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
-        sim = env.sim
-        input_size = env.observation_space.shape[0]  # Observation size
-        output_size = env.action_space.shape[0]  # Action size
-        brain = NeuralController(input_size, output_size)
-        weight_shapes = [p.shape for p in brain.parameters()]
-        for seed in utils.seed_list:
-            p = multiprocessing.Process(target=run_seed, args=(seed, scenario, weight_shapes, brain, connectivity))
-            p.start()
-            processes.append(p)
-    for p in processes:
-        p.join()
-        processes.remove(p)
+    seed = 123
+    scenario = "DownStepper-v0"
+    env = gym.make(scenario, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
+    sim = env.sim
+    input_size = env.observation_space.shape[0]  # Observation size
+    output_size = env.action_space.shape[0]  # Action size
+    brain = NeuralController(input_size, output_size)
+    weight_shapes = [p.shape for p in brain.parameters()]
+    run_seed(seed,scenario,weight_shapes,brain,connectivity)
+
 
     
