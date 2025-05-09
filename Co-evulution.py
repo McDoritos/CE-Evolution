@@ -180,7 +180,6 @@ class CoEvolution:
                 best_fit = max(fits[best_idx], previous_fit)
                 best_weights = mutated_pop[best_idx] if fits[best_idx] > previous_fit else best_con['weights']
             else:
-                print()
                 initial_weights = self.adapt_weights_to_structure(input_size, output_size)
                 mutated_pop = [self.mutate_weights(initial_weights) for _ in range(10)]
                 #fits = self.evaluate_parallel(struc, mutated_pop)

@@ -1,3 +1,4 @@
+from datetime import datetime
 import numpy as np
 import random
 import gymnasium as gym
@@ -8,31 +9,27 @@ from tqdm import trange
 from fixed_controllers import *
 import copy
 from multiprocessing import Pool, cpu_count
+import multiprocessing
+import utils
 
 # Configurações
 NUM_GENERATIONS = 100
 STEPS = 500
 SCENARIO = 'GapJumper-v0'  # CaveCrawler-v0
-SEED = 42
-POPULATION_SIZE = 20
-MUTATION_RATE = 0.1
-ELITE_SIZE = 5
 MIN_GRID_SIZE = (5, 5)
 MAX_GRID_SIZE = (5, 5)
 VOXEL_TYPES = [0, 1, 2, 3, 4]  # 0: vazio, 1: rígido, 2: macio, 3: atuador+, 4: atuador-
 
-
-np.random.seed(SEED)
-random.seed(SEED)
-torch.manual_seed(SEED)
-
 class CoEvolution:
-    def __init__(self, pop_size_struc= 10, offspring_size=10 , pop_size_con=20, elite=5, mutation=0.2):
+    def __init__(self, scenario, seed, seed_folder, pop_size_struc= 10, offspring_size=10 , pop_size_con=20, elite=5, mutation=0.2):
+        utils.set_seed(seed)
         self.pop_size_struc = pop_size_struc
         self.pop_size_con = pop_size_con
         self.mutation = mutation
         self.offspring_size = offspring_size
         self.elite = elite
+        self.scenario = scenario
+        self.seed_folder = seed_folder
         # Inicializa populações
         self.pop_struc = [self.create_random_robot() for _ in range(pop_size_struc)]
         
@@ -47,51 +44,19 @@ class CoEvolution:
         self.min_diversity = 0.1  # Limite mínimo de diversidade
         self.fitness_history = []  # Histórico para mutação adaptativa
 
-    def evaluate(self, robot_structure, controller_weights, view=False):    
-        connectivity = get_full_connectivity(robot_structure)
-        env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
-
-        input_size = env.observation_space.shape[0]
-        output_size = env.observation_space.shape[0]
-
-        brain = NeuralController(input_size, output_size)
-        set_weights(brain, controller_weights)
-        
-        state = env.reset()[0]
-        viewer = EvoViewer(env.sim) if view else None
-        total_reward = 0
-        
-        for t in range(STEPS):
-            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            action = brain(state_tensor).detach().numpy().flatten()
-            
-            if view:
-                viewer.render('screen')
-            
-            state, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
-            
-            if terminated or truncated:
-                break
-        
-        if view:
-            viewer.close()
-        env.close()
-        return total_reward
-
     def evaluate_parallel(self, struc, weights_list):
-        """Versão com multiprocessing"""
-        args = [(struc, weights) for weights in weights_list]
-        
-        with Pool(processes=cpu_count()) as pool:
-            results = pool.starmap(self._evaluate_single, args)
+        """Versão serial da avaliação"""
+        results = []
+        for weights in weights_list:
+            results.append(self._evaluate_single(struc, weights))
         return results
 
     def _evaluate_single(self, struc, weights):
         connectivity = get_full_connectivity(struc)
-        env = gym.make(SCENARIO, max_episode_steps=STEPS, 
+        env = gym.make(self.scenario, max_episode_steps=STEPS, 
                       body=struc, connections=connectivity)
-        
+        env.metadata['render_fps'] = 30 
+
         brain = NeuralController(env.observation_space.shape[0], 
                                env.action_space.shape[0])
         set_weights(brain, weights)
@@ -183,20 +148,9 @@ class CoEvolution:
         offsprings_struc = [self.mutate(random.choice(self.pop_struc)) for _ in range(self.offspring_size)]
         combined_population_struc = self.pop_struc + offsprings_struc
 
-        diversity = self.calculate_diversity()
-
-        if diversity < self.min_diversity:
-            num_to_replace = max(1, int(self.pop_size_struc * 0.3))
-
-            sorted_pop = sorted(zip(self.fitness_struc, self.pop_struc), key=lambda x: x[0], reverse=True)
-            elite = [x[1] for x in sorted_pop[:self.elite]]
-
-            new_individuals = [self.create_random_robot() for _ in range(num_to_replace)]
-            combined_population_struc = elite + new_individuals + offsprings_struc[len(elite):]
-
         for struc in combined_population_struc:
             connectivity = get_full_connectivity(struc)
-            env = gym.make(SCENARIO, max_episode_steps=STEPS, body=struc, connections=connectivity)
+            env = gym.make(self.scenario, max_episode_steps=STEPS, body=struc, connections=connectivity)
             input_size = env.observation_space.shape[0]
             output_size = env.action_space.shape[0]
             env.close()
@@ -251,52 +205,53 @@ class CoEvolution:
     def evolve(self, generations):
         for gen in trange(generations, desc="Co-evolving"):
             (best_struc, best_con), best_fit = self.evolutionary_algorithm()
-            print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f} | Diversity = {self.calculate_diversity():.2f}")
+
+            gif_folder = os.path.join(self.seed_folder, f"gif.gif")
+            utils.create_gif_coev(best_struc, scenario=self.scenario, controller=best_con, steps=STEPS, filename=gif_folder)
+            csv_filename = os.path.join(self.seed_folder, f"gen_{gen}.csv")
+            utils.save_pairing(self.pairings, csv_filename)
+
+            print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f}")
         
         return self.best_struc, self.best_con, self.best_fitness
-if __name__ == "__main__":
-    co_evolver = CoEvolution()
-    best_struct, best_ctrl, best_fit = co_evolver.evolve(NUM_GENERATIONS)
     
+def run_seed(seed, scenario):
+    utils.set_seed(seed)
+    base_dir = "gen_data_coevolution"
+    os.makedirs("gen_data_coevolution", exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    specific_folder = os.path.join(base_dir, f"CoEvolution")
+    os.makedirs(specific_folder, exist_ok=True)
+
+    scenario_folder = os.path.join(specific_folder, scenario)
+    os.makedirs(scenario_folder, exist_ok=True)
+
+    seed_folder = os.path.join(scenario_folder, f"seed_{seed} - {timestamp}")
+    os.makedirs(seed_folder, exist_ok=True)
+
+    co_evolver = CoEvolution(scenario, seed, seed_folder)
+    best_structure, best_controller, best_fitness = co_evolver.evolve(NUM_GENERATIONS)
+
     # Visualização do melhor resultado
     print("\n=== Best Solution ===")
-    print(f"Best Fitness: {best_fit:.4f}")
+    print(f"Best Fitness: {best_fitness:.4f}")
     print("Best Structure:")
-    print(best_struct)
+    print(best_structure)
     print("Best Controller:")
-    print(best_ctrl)
-    
-    # Configurar rede neural para visualização
-    env = gym.make(SCENARIO, body=best_struct)
-    input_size = env.observation_space.shape[0]
-    output_size = env.action_space.shape[0]
-    brain = NeuralController(input_size, output_size)
+    print(best_controller)
 
-    # Certificar-se que best_ctrl tem os shapes corretos
-    if len(best_ctrl) != len(list(brain.parameters())):
-        print("Erro: Dimensões do controlador evoluído não correspondem à rede!")
-        exit()
+    utils.create_gif_coev(best_structure, scenario=scenario, controller=best_controller, steps=STEPS)   
 
-    set_weights(brain, best_ctrl)
-    env.close()
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    processes = []
+    for scenario in utils.scenarios_3_3:
+        for seed in utils.seed_list:
+            p = multiprocessing.Process(target=run_seed, args=(seed, scenario))
+            p.start()
+            processes.append(p)
 
-    # Visualização
-    env = gym.make(SCENARIO, body=best_struct, render_mode='human')
-    state = env.reset()[0]
-    viewer = EvoViewer(env.sim)
-    viewer.track_objects('robot')
-
-    for _ in range(STEPS):
-        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        try:
-            action = brain(state_tensor).detach().numpy().flatten()
-            viewer.render('screen')
-            state, _, terminated, truncated, _ = env.step(action)
-            if terminated or truncated:
-                break
-        except Exception as e:
-            print(f"Erro durante simulação: {e}")
-            break
-
-    viewer.close()
-    env.close()
+    for p in processes:
+        p.join()

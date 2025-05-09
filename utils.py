@@ -80,6 +80,50 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
     except ValueError as e:
         print('Invalid')
 
+def create_gif_coev(robot_structure, filename='best_robot.gif', duration=0.066, scenario=None, 
+               steps=500, controller=None):
+    try:
+        
+        connectivity = get_full_connectivity(robot_structure)
+        env = gym.make(scenario, max_episode_steps=steps, 
+                     body=robot_structure, connections=connectivity)
+        
+        env.metadata = {'render_fps': 30}
+        
+        brain = NeuralController(controller['input_size'], controller['output_size'])
+        set_weights(brain, controller['weights'])
+        
+        env.reset()
+        sim = env.sim
+        viewer = EvoViewer(sim)
+        viewer.track_objects('robot')
+        frames = []
+        t_reward = 0
+
+        obs = env.reset()[0]
+        for t in range(steps):
+            state_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+            action = brain(state_tensor).detach().numpy().flatten()
+            
+            obs, reward, terminated, truncated, _ = env.step(action)
+            t_reward += reward
+            
+            frame = viewer.render('rgb_array')
+            frames.append(frame)
+            
+            if terminated or truncated:
+                break
+
+        viewer.close()
+        env.close()
+        if frames:
+            imageio.mimsave(filename, frames, duration=duration, optimize=True)
+        return t_reward
+        
+    except Exception as e:
+        print(f"Error creating GIF: {str(e)}")
+        return 0
+
 
 def create_gifs(structure, scenario, controller, steps=500, filename="run.gif"):
     connectivity = get_full_connectivity(structure)
@@ -88,8 +132,13 @@ def create_gifs(structure, scenario, controller, steps=500, filename="run.gif"):
     input_size = env.observation_space.shape[0]
     output_size = env.action_space.shape[0]
 
+    if isinstance(controller, dict):
+        weights = controller['weights']
+    else:
+        weights = controller
+
     brain = NeuralController(input_size, output_size)
-    set_weights(brain, controller)
+    set_weights(brain, weights)
 
     frames = []
     state = env.reset()[0]
@@ -193,17 +242,24 @@ def save_pairing(pairing, filename):
         writer = csv.writer(csvfile)
         
         if not file_exists:
-            writer.writerow(["Index", "Fitness", "Structure", "Controller"])
+            writer.writerow(["Index", "Fitness", "Structure", "Controller_Weights"])
             
         for idx, (structure, controller, fitness) in enumerate(pairing):
-            structure_str = '|'.join([','.join(map(str, row)) for row in structure])
-
-            controller_str = ";".join(
-                [",".join(map(str, w.flatten())) 
-                 for w in controller]
-            )
-
-            writer.writerow([idx, fitness, structure_str, controller_str])
+            try:
+                structure_str = '|'.join([','.join(map(str, row)) for row in structure])
+                weights = controller.get('weights', [])
+                
+                weight_strs = []
+                for w in weights:
+                    weight_strs.append(str(w))
+                
+                controller_str = ";".join(weight_strs)
+                
+                writer.writerow([idx, fitness, structure_str, controller_str])
+                
+            except Exception as e:
+                print(f"Error saving pairing {idx}: {str(e)}")
+                continue
 
 
 
