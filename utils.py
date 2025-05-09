@@ -8,11 +8,15 @@ import imageio
 import pandas as pd
 import torch
 from fixed_controllers import *
+from evogym.envs import *
+from evogym import EvoWorld, EvoSim, EvoViewer, sample_robot, get_full_connectivity, is_connected
 
 import csv
 import os
 from datetime import datetime
 import json
+
+from neural_controller import NeuralController, set_weights
 
 # ---- SIMULATE BEST ROBOT ----
 def simulate_best_robot(robot_structure, scenario=None, steps=500, controller = alternating_gait):
@@ -77,10 +81,38 @@ def create_gif(robot_structure, filename='best_robot.gif', duration=0.066, scena
         print('Invalid')
 
 
+def create_gifs(structure, scenario, controller, steps=500, filename="run.gif"):
+    connectivity = get_full_connectivity(structure)
+    env = gym.make(scenario, body=structure, connections=connectivity, max_episode_steps=steps, render_mode="rgb_array")
+    
+    input_size = env.observation_space.shape[0]
+    output_size = env.action_space.shape[0]
+
+    brain = NeuralController(input_size, output_size)
+    set_weights(brain, controller)
+
+    frames = []
+    state = env.reset()[0]
+    for _ in range(steps):
+        frame = env.render()
+        frames.append(frame)
+
+        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        action = brain(state_tensor).detach().numpy().flatten()
+        state, reward, terminated, truncated, _ = env.step(action)
+
+        if terminated or truncated:
+            break
+
+    env.close()
+    imageio.mimsave(filename, frames, duration=0.066, optimize=True)  # 30 FPS
+
+    
 # Added by us
 scenarios_3_1 = ["Walker-v0", "BridgeWalker-v0"]
 scenarios_3_2 = ["DownStepper-v0", "ObstacleTraverser-v0"]
-scenarios = ["DownStepper-v0", "BridgeWalker-v0", "ObstacleTraverser-v0"]
+scenarios_3_3 = ["GapJumper-v0", "CaveCrawler-v0"]
+scenarios = ["DownStepper-v0", "BridgeWalker-v0", "ObstacleTraverser-v0", "GapJumper-v0", "CaveCrawler-v0"]
 seed_list = [42, 123, 2025, 8675309, 123456789]
 
 def set_seed(seed: int):
@@ -151,6 +183,28 @@ def save_controller(population_with_fitness, filename="evolution_data.csv"):
                  for w in controller]
             )
             writer.writerow([idx, fitness, controller_str])
+
+
+def save_pairing(pairing, filename):
+    """Save generation data to a CSV file."""
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        if not file_exists:
+            writer.writerow(["Index", "Fitness", "Structure", "Controller"])
+            
+        for idx, (structure, controller, fitness) in enumerate(pairing):
+            structure_str = '|'.join([','.join(map(str, row)) for row in structure])
+
+            controller_str = ";".join(
+                [",".join(map(str, w.flatten())) 
+                 for w in controller]
+            )
+
+            writer.writerow([idx, fitness, structure_str, controller_str])
+
 
 
 
