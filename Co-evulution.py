@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count
 # Configurações
 NUM_GENERATIONS = 100
 STEPS = 500
-SCENARIO = 'CaveCrawler-v0'  # CaveCrawler-v0
+SCENARIO = 'GapJumper-v0'  # CaveCrawler-v0
 SEED = 42
 POPULATION_SIZE = 20
 MUTATION_RATE = 0.1
@@ -27,12 +27,12 @@ random.seed(SEED)
 torch.manual_seed(SEED)
 
 class CoEvolution:
-    def __init__(self, pop_size_struc=3, offspring_size=3 , pop_size_con=20, elite=5, mutation=0.1):
+    def __init__(self, pop_size_struc=3, offspring_size=3, pop_size_con=20, elite=5, mutation=0.2):
         self.pop_size_struc = pop_size_struc
         self.pop_size_con = pop_size_con
         self.mutation = mutation
         self.offspring_size = offspring_size
-        self.elite = 5
+        self.elite = elite
         # Inicializa populações
         self.pop_struc = [self.create_random_robot() for _ in range(pop_size_struc)]
         
@@ -44,43 +44,40 @@ class CoEvolution:
         self.best_con = None
         self.best_fitness = -np.inf
 
-        self.num_repeats_con = 10
+        self.min_diversity = 0.1  # Limite mínimo de diversidade
+        self.fitness_history = []  # Histórico para mutação adaptativa
 
     def evaluate(self, robot_structure, controller_weights, view=False):    
-        #try:
-            connectivity = get_full_connectivity(robot_structure)
-            env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
+        connectivity = get_full_connectivity(robot_structure)
+        env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
 
-            input_size = env.observation_space.shape[0]
-            output_size = env.observation_space.shape[0]
+        input_size = env.observation_space.shape[0]
+        output_size = env.observation_space.shape[0]
 
-            brain = NeuralController(input_size, output_size)
-            set_weights(brain, controller_weights)
-            
-            state = env.reset()[0]
-            viewer = EvoViewer(env.sim) if view else None
-            total_reward = 0
-            
-            for t in range(STEPS):
-                state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-                action = brain(state_tensor).detach().numpy().flatten()
-                
-                if view:
-                    viewer.render('screen')
-                
-                state, reward, terminated, truncated, _ = env.step(action)
-                total_reward += reward
-                
-                if terminated or truncated:
-                    break
+        brain = NeuralController(input_size, output_size)
+        set_weights(brain, controller_weights)
+        
+        state = env.reset()[0]
+        viewer = EvoViewer(env.sim) if view else None
+        total_reward = 0
+        
+        for t in range(STEPS):
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            action = brain(state_tensor).detach().numpy().flatten()
             
             if view:
-                viewer.close()
-            env.close()
-            return total_reward
-        #except Exception as e:
-        #    print(f"Error in evaluation: {str(e)}")
-        #    return -1000
+                viewer.render('screen')
+            
+            state, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
+            
+            if terminated or truncated:
+                break
+        
+        if view:
+            viewer.close()
+        env.close()
+        return total_reward
 
     def evaluate_parallel(self, struc, weights_list):
         """Versão com multiprocessing"""
@@ -111,7 +108,6 @@ class CoEvolution:
                 
         env.close()
         return total_reward
-        
     
     def create_random_robot(self):
         """Generate a valid random robot structure."""
@@ -143,9 +139,43 @@ class CoEvolution:
         #print(f"[WARNING] Mutation failed after {max_attempts} attempts. Returning original parent.")
         return parent
     
-    def mutate_weights(self, weights, noise_std=0.1):
-        """Aplica mutação gaussiana a cada peso"""
-        return [w + np.random.normal(0, noise_std, w.shape) for w in weights]
+    def calculate_diversity(self):
+        if len(self.pop_struc) <= 1:
+            return 1.0
+            
+        distances = []
+        for i in range(len(self.pop_struc)):
+            for j in range(i+1, len(self.pop_struc)):
+                diff = np.mean(self.pop_struc[i] != self.pop_struc[j])
+                distances.append(diff)
+        
+        return np.mean(distances)
+
+    def mutate_weights(self, weights, base_noise_std=0.1):
+        if len(self.fitness_history) > 10:
+            recent_max = max(self.fitness_history[-10:])
+            recent_min = min(self.fitness_history[-10:])
+            recent_avg = np.mean(self.fitness_history[-10:])
+            recent_improvement = recent_max - recent_min
+            
+            stagnation_threshold = 0.01 * recent_avg
+            
+            if recent_improvement < stagnation_threshold:
+                noise_std = min(base_noise_std * 2, 0.4)  # Limita a 0.4
+                print(f"Stagnation detected - increasing mutation to {noise_std:.3f}")
+            else:
+                noise_std = max(base_noise_std * 0.8, 0.01)  # Limita a 0.01
+                print(f"Improvement detected - decreasing mutation to {noise_std:.3f}")
+        else:
+            noise_std = base_noise_std  # Valor padrão
+        
+        mutated = []
+        for w in weights:
+            mutation = np.random.normal(0, noise_std, w.shape)
+            new_w = w + mutation
+            mutated.append(new_w)
+        
+        return mutated
 
     def evolutionary_algorithm(self):
         self.fitness_struc = []
@@ -155,6 +185,17 @@ class CoEvolution:
         offsprings_struc = [self.mutate(random.choice(self.pop_struc)) for _ in range(self.offspring_size)]
         combined_population_struc = self.pop_struc + offsprings_struc
 
+        diversity = self.calculate_diversity()
+
+        if diversity < self.min_diversity:
+            num_to_replace = max(1, int(self.pop_size_struc * 0.3))
+
+            sorted_pop = sorted(zip(self.fitness_struc, self.pop_struc), key=lambda x: x[0], reverse=True)
+            elite = [x[1] for x in sorted_pop[:self.elite]]
+
+            new_individuals = [self.create_random_robot() for _ in range(num_to_replace)]
+            combined_population_struc = elite + new_individuals + offsprings_struc[len(elite):]
+
         for struc in combined_population_struc:
             connectivity = get_full_connectivity(struc)
             env = gym.make(SCENARIO, max_episode_steps=STEPS, body=struc, connections=connectivity)
@@ -162,11 +203,9 @@ class CoEvolution:
             output_size = env.action_space.shape[0]
             env.close()
 
-            existing_pair = next((pair for pair in self.pairings 
-                                if np.array_equal(pair[0], struc)), None)
+            existing_pair = next((pair for pair in self.pairings if np.array_equal(pair[0], struc)), None)
 
             if existing_pair:
-                # ESTRUTURA EXISTENTE - avaliação paralela
                 _, best_con, previous_fit = existing_pair
                 mutated_pop = [self.mutate_weights(best_con['weights']) for _ in range(10)]
                 fits = self.evaluate_parallel(struc, mutated_pop)
@@ -175,7 +214,6 @@ class CoEvolution:
                 best_fit = max(fits[best_idx], previous_fit)
                 best_weights = mutated_pop[best_idx] if fits[best_idx] > previous_fit else best_con['weights']
             else:
-                # NOVA ESTRUTURA - avaliação paralela
                 brain = NeuralController(input_size, output_size)
                 initial_weights = [np.random.randn(*p.shape) for p in brain.parameters()]
                 mutated_pop = [self.mutate_weights(initial_weights) for _ in range(10)]
@@ -196,7 +234,6 @@ class CoEvolution:
             self.fitness_struc.append(best_fit)
             self.fitness_con.append(best_fit)
 
-        # Restante do método mantido igual
         self.pairings = new_pairings.copy()    
         
         sorted_population = sorted(zip(self.fitness_struc, combined_population_struc), 
@@ -209,17 +246,16 @@ class CoEvolution:
                 self.best_struc, self.best_con, self.best_fitness = current_best
                 self.best_struc = self.best_struc.copy()
                 self.best_con = self.best_con.copy()
+                self.fitness_history.append(self.best_fitness)
 
         return (self.best_struc.copy(), self.best_con.copy()), self.best_fitness
-
 
     def evolve(self, generations):
         for gen in trange(generations, desc="Co-evolving"):
             (best_struc, best_con), best_fit = self.evolutionary_algorithm()
-            print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f} ; Best Fitness (gen) = {best_fit:.4f}")
+            print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f} | Diversity = {self.calculate_diversity():.2f}")
         
         return self.best_struc, self.best_con, self.best_fitness
-
 if __name__ == "__main__":
     co_evolver = CoEvolution()
     best_struct, best_ctrl, best_fit = co_evolver.evolve(NUM_GENERATIONS)
