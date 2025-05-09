@@ -131,19 +131,11 @@ def cma_es(seed_folder, weight_shapes, brain, scenario, connectivity):
         if 'population_with_fitness' in locals():
             utils.save_controllers(gen+1, population_with_fitness, csv_filename)
         
-<<<<<<< HEAD
-        population_with_fitness = [
-            (vector_to_weights(x, weight_shapes), f) 
-            for x, f in zip(solutions, real_fitness)
-        ]
-        population_with_fitness.sort(key=lambda x: x[1], reverse=True)
-=======
         if best_individual is not None:
             print(f"Best reward achieved: {best_individual_reward:.4f}")
             set_weights(brain, best_individual)       
     finally:
         print("Evolution completed or interrupted. Data saved.")
->>>>>>> e9fe2309bf39bafe7fc85e70a6e6e857ef0941e2
 
     return best_individual, best_individual_reward
 
