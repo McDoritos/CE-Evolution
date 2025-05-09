@@ -47,38 +47,6 @@ class CoEvolution:
         self.min_diversity = 0.1  # Limite mínimo de diversidade
         self.fitness_history = []  # Histórico para mutação adaptativa
 
-    def evaluate(self, robot_structure, controller_weights, view=False):    
-        connectivity = get_full_connectivity(robot_structure)
-        env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
-
-        input_size = env.observation_space.shape[0]
-        output_size = env.observation_space.shape[0]
-
-        brain = NeuralController(input_size, output_size)
-        set_weights(brain, controller_weights)
-        
-        state = env.reset()[0]
-        viewer = EvoViewer(env.sim) if view else None
-        total_reward = 0
-        
-        for t in range(STEPS):
-            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            action = brain(state_tensor).detach().numpy().flatten()
-            
-            if view:
-                viewer.render('screen')
-            
-            state, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
-            
-            if terminated or truncated:
-                break
-        
-        if view:
-            viewer.close()
-        env.close()
-        return total_reward
-
     def evaluate_parallel(self, struc, weights_list):
         """Versão com multiprocessing"""
         args = [(struc, weights) for weights in weights_list]
@@ -212,10 +180,11 @@ class CoEvolution:
                 best_fit = max(fits[best_idx], previous_fit)
                 best_weights = mutated_pop[best_idx] if fits[best_idx] > previous_fit else best_con['weights']
             else:
-                brain = NeuralController(input_size, output_size)
-                initial_weights = [np.random.randn(*p.shape) for p in brain.parameters()]
+                print()
+                initial_weights = self.adapt_weights_to_structure(input_size, output_size)
                 mutated_pop = [self.mutate_weights(initial_weights) for _ in range(10)]
-                fits = self.evaluate_parallel(struc, mutated_pop)
+                #fits = self.evaluate_parallel(struc, mutated_pop)
+                fits = [self._evaluate_single(struc, weights) for weights in mutated_pop]
                 
                 best_idx = np.argmax(fits)
                 best_fit = fits[best_idx]
@@ -254,6 +223,36 @@ class CoEvolution:
             print(f"Generation {gen+1}: Best Fitness (global) = {self.best_fitness:.4f} | Diversity = {self.calculate_diversity():.2f}")
         
         return self.best_struc, self.best_con, self.best_fitness
+
+    def adapt_weights_to_structure(self, input_size, output_size):
+        new_brain = NeuralController(input_size, output_size)
+        new_weights = []
+
+        if not self.best_con:
+            # No previous controller exists
+            return [np.random.randn(*p.shape) for p in new_brain.parameters()]
+
+        old_weights = self.best_con['weights']
+        old_input_size = self.best_con['input_size']
+        old_output_size = self.best_con['output_size']
+
+        for new_w, old_w in zip(new_brain.parameters(), old_weights):
+            new_shape = new_w.shape
+            old_shape = old_w.shape
+
+            # Create a new weight matrix with the right shape
+            adapted_w = np.random.randn(*new_shape)
+
+            # Compute overlapping region
+            slices = tuple(slice(0, min(ns, os)) for ns, os in zip(new_shape, old_shape))
+
+            # Transfer overlapping weights
+            adapted_w[slices] = old_w[slices]
+            new_weights.append(adapted_w)
+
+        return new_weights
+
+
 if __name__ == "__main__":
     co_evolver = CoEvolution()
     best_struct, best_ctrl, best_fit = co_evolver.evolve(NUM_GENERATIONS)

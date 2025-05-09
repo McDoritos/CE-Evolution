@@ -1,4 +1,5 @@
 import datetime
+import multiprocessing
 import numpy as np
 import random
 import gymnasium as gym
@@ -16,12 +17,11 @@ os.makedirs("gen_data_structures", exist_ok=True)
 
 
 # ---- PARAMETERS ----
-NUM_GENERATIONS = 50  # Number of generations to evolve
+NUM_GENERATIONS = 100  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
-SCENARIO = 'Walker-v0'
-POP = 50
+POP = 30
 MUTATION = 0.1
 ELITE = 10
 # ---- VOXEL TYPES ----
@@ -29,11 +29,11 @@ VOXEL_TYPES = [0, 1, 2, 3, 4]  # Empty, Rigid, Soft, Active (+/-)
 
 CONTROLLER = alternating_gait
 
-def evaluate_fitness(robot_structure, view=False):    
+def evaluate_fitness(robot_structure, scenario, view=False):    
     try:
         connectivity = get_full_connectivity(robot_structure)
   
-        env = gym.make(SCENARIO, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
+        env = gym.make(scenario, max_episode_steps=STEPS, body=robot_structure, connections=connectivity)
         env.reset()
         sim = env.sim
         viewer = EvoViewer(sim)
@@ -67,16 +67,14 @@ def create_random_robot():
     return random_robot
 
 
-def genetic_algorithm(seed_folder):
+def genetic_algorithm(seed_folder, scenario):
     try:
         population = [create_random_robot() for _ in range(POP)]
         best_global = None
         best_fitness = -np.inf
 
         for gen in trange(NUM_GENERATIONS, desc='Evolving GA ', unit='gen'):
-            #with multiprocessing.Pool() as pool:
-            #    fitness_values = pool.map(evaluate_fitness, population)
-            fitness_values = [evaluate_fitness(ind) for ind in population]
+            fitness_values = [evaluate_fitness(ind, scenario) for ind in population]
 
             population_with_fitness = list(zip(population, fitness_values))
             population_with_fitness = sorted(population_with_fitness, key=lambda x: x[1], reverse=True)
@@ -99,24 +97,19 @@ def genetic_algorithm(seed_folder):
             
             while len(new_population) < POP:
                 p1, p2 = tournament_selection(population, fitness_values)
-                child = crossover(p1, p2)
+                child = crossover(p1, p2, scenario)
                 child = mutate(child, MUTATION)
                 new_population.append(child)
             
             population = new_population
 
-    except KeyboardInterrupt:
-        #print("\n[INFO] Interrupted by user. Finalizing with current best found...")
-        
-        print("\n[INFO] Interrupted by user. Finalizing with current best found...")
-        
-        if 'population_with_fitness' in locals():
-            utils.save_structures(gen+1, population_with_fitness, csv_filename)
+    except Exception as e:
+        print(f"\n[ERROR] {e}\n")
 
     finally:
         return best_global, best_fitness
 
-def crossover(parent1, parent2, max_attempts=10):
+def crossover(parent1, parent2, scenario, max_attempts=10):
 
     for _ in range(max_attempts):
         mask = np.random.randint(0, 2, size=parent1.shape)
@@ -125,7 +118,7 @@ def crossover(parent1, parent2, max_attempts=10):
         if is_connected(child) and has_actuator(child):
             return child
     
-    return parent1 if evaluate_fitness(parent1) > evaluate_fitness(parent2) else parent2
+    return parent1 if evaluate_fitness(parent1, scenario) > evaluate_fitness(parent2, scenario) else parent2
 
 def tournament_selection(population, fitness_values, k=5):
     selected_indices = random.sample(range(len(population)), k)
@@ -155,20 +148,20 @@ def mutate(individual, mutation_rate, max_attempts=5):
     return original
 
 
-def run_ga():
+def run_ga(seed, scenario):
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     ga_folder = os.path.join(base_dir, f"GA_Structure")
     os.makedirs(ga_folder, exist_ok=True)
 
-    scenario_folder = os.path.join(ga_folder, SCENARIO)
+    scenario_folder = os.path.join(ga_folder, scenario)
     os.makedirs(scenario_folder, exist_ok=True)
 
     seed_folder = os.path.join(scenario_folder, f"seed_{seed} - {timestamp}")
     os.makedirs(seed_folder, exist_ok=True)
 
-    best_robot, best_fitness = genetic_algorithm(seed_folder)
+    best_robot, best_fitness = genetic_algorithm(seed_folder, scenario)
     if best_robot is not None:
         print("Best robot structure found:")
         print(best_robot)
@@ -176,17 +169,27 @@ def run_ga():
         print(best_fitness)
 
         for i in range(5):
-            utils.simulate_best_robot(best_robot, scenario=SCENARIO, steps=STEPS)
+            utils.simulate_best_robot(best_robot, scenario=scenario, steps=STEPS)
         
-        utils.create_gif(best_robot, filename=f'ga_{timestamp}.gif', scenario=SCENARIO, steps=STEPS, controller=CONTROLLER)    
-        utils.save_plot(seed_folder, SCENARIO, seed)
+        gif_filename = os.path.join(seed_folder, f"_best.gif")
+        utils.create_gif(best_robot, filename=gif_filename, scenario=scenario, steps=STEPS, controller=CONTROLLER)    
+        utils.save_plot(seed_folder, scenario, seed)
     else:
         print("No valid robot was evolved.")
 
+def run_seed(seed, scenario):
+    utils.set_seed(seed)
+    run_ga(seed, scenario)
+
 
 if __name__ == "__main__":
-    for scenario in utils.scenarios_3_1:
-        SCENARIO = scenario
+    multiprocessing.freeze_support()
+    processes = []
+    for scenario in utils.scenarios_3_1:        
         for seed in utils.seed_list:
-            utils.set_seed(seed)
-            run_ga()
+            p = multiprocessing.Process(target=run_seed, args=(seed, scenario))
+            p.start()
+            processes.append(p)
+    
+    for p in processes:
+        p.join()
