@@ -17,11 +17,11 @@ os.makedirs("gen_data_structures", exist_ok=True)
 
 
 # ---- PARAMETERS ----
-NUM_GENERATIONS = 30  # Number of generations to evolve
+NUM_GENERATIONS = 100  # Number of generations to evolve
 MIN_GRID_SIZE = (5, 5)  # Minimum size of the robot grid
 MAX_GRID_SIZE = (5, 5)  # Maximum size of the robot grid
 STEPS = 500
-POP = 100
+POP = 30
 MUTATION = 0.1
 ELITE = 10
 # ---- VOXEL TYPES ----
