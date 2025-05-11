@@ -18,8 +18,8 @@ os.makedirs("gen_data_controllers", exist_ok=True)
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
 SEED = 42
-POPULATION_SIZE = 10 # 10 is better than 20 with experiments
-OFFSPRING_SIZE = 20
+POPULATION_SIZE = 9
+OFFSPRING_SIZE = 16
 
 
 robot_structure = np.array([ 
@@ -118,6 +118,8 @@ def es(seed_folder, brain, scenario, connectivity):
             set_weights(brain, best_individual)       
     finally:
         print("Evolution completed or interrupted. Data saved.")
+
+    return best_individual, best_individual_reward
 
 def run_es(seed, scenario, brain, connectivity):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

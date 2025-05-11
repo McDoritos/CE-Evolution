@@ -1,0 +1,5 @@
+Task,Best Algorithm(s),Best Mean Fitness,Significant Difference,ANOVA p-value
+BridgeWalker-v0,"ES_Structure, GA_Structure 100x30, GA_Structure 30x100",3.3257364816093604,No,0.9147221668782609
+DownStepper-v0,CMA_ES_controller,4.440918379130914,Yes,0.00734445375576285
+ObstacleTraverser-v0,"CMA_ES_controller, ES_controller, ES_controller 3000",2.287510695380765,Yes,0.07362572031486468
+Walker-v0,"ES_Structure, GA_Structure 100x30, GA_Structure 30x100",5.995172428906791,No,0.75756598823228
