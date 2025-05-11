@@ -152,7 +152,7 @@ def run_ga(seed, scenario):
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    ga_folder = os.path.join(base_dir, f"GA_Structure")
+    ga_folder = os.path.join(base_dir, f"GA_Structure_sinusoidal-controller")
     os.makedirs(ga_folder, exist_ok=True)
 
     scenario_folder = os.path.join(ga_folder, scenario)
