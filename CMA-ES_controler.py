@@ -94,6 +94,8 @@ def cma_es(seed_folder, weight_shapes, brain, scenario, connectivity):
         for gen in trange(NUM_GENERATIONS, desc="CMA-ES Optimization"):
             # 1 - Generates solutions
             solutions = es.ask()
+            print("Solutions generated: ", len(solutions))
+            input("Press Enter to continue...")
 
             # 2 - Evaluates solutions
             raw_fitness = [cma_fitness_wrapper(x, weight_shapes, brain, scenario, connectivity) for x in solutions]  # Valores negativos (CMA-ES minimiza)
