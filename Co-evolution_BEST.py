@@ -247,11 +247,12 @@ def run_seed(seed, scenario):
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     processes = []
-    for scenario in utils.scenarios_3_3:
-        for seed in utils.seed_list:
-            p = multiprocessing.Process(target=run_seed, args=(seed, scenario))
-            p.start()
-            processes.append(p)
+    #for scenario in utils.scenarios_3_3:
+    scenario = "CaveCrawler-v0"
+    for seed in utils.seed_list:
+        p = multiprocessing.Process(target=run_seed, args=(seed, scenario))
+        p.start()
+        processes.append(p)
 
     for p in processes:
         p.join()
