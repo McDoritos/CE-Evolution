@@ -17,12 +17,8 @@ os.makedirs(base_dir, exist_ok=True)
 
 NUM_GENERATIONS = 100  # Number of generations to evolve
 STEPS = 500
-SCENARIO = 'DownStepper-v0'
-SEED = 42
-POPULATION_SIZE = 25 # 10 > 20 
+POPULATION_SIZE = 13 # 10 > 20 
 CROSSOVER_PER = 0.7
-np.random.seed(SEED)
-random.seed(SEED)
 
 
 robot_structure = np.array([ 
